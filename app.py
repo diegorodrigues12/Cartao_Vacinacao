@@ -1,13 +1,20 @@
 # cartao_vacinacao_api/app.py
-from flask import Flask, request, jsonify, render_template # render_template deve estar aqui!
+from flask import Flask, request, jsonify, render_template
 from config import Config
 from models import db, Vacina, Pessoa, Vacinacao
 from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema
 from datetime import datetime
 import os
+import logging # Importar o módulo logging
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Configurar logging básico (opcional, mas recomendado para depuração em produção)
+if not app.debug:
+    file_handler = logging.FileHandler('error.log')
+    file_handler.setLevel(logging.WARNING)
+    app.logger.addHandler(file_handler)
 
 # Inicializa as extensões
 db.init_app(app)
@@ -40,9 +47,17 @@ with app.app_context():
         if not Vacina.query.filter_by(nome=vacina_nome).first():
             new_vacina = Vacina(nome=vacina_nome)
             db.session.add(new_vacina)
-            print(f"Vacina '{vacina_nome}' adicionada ao banco de dados.") # Apenas para ver no terminal
+            print(f"Vacina '{vacina_nome}' adicionada ao banco de dados.")
     db.session.commit()
     print("Vacinas iniciais populadas ou já existentes.")
+
+# --- Manipulador de Erro Global (NOVO) ---
+# Garante que erros 500 (erros internos do servidor) sempre retornem JSON
+@app.errorhandler(500)
+def internal_server_error(e):
+    # Registrar a exceção completa para depuração no servidor
+    app.logger.exception("Ocorreu uma exceção não tratada durante uma requisição.")
+    return jsonify({"message": "Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde."}), 500
 
 # --- Rotas da API ---
 
@@ -69,6 +84,7 @@ def add_vacina():
         return vacina_schema.jsonify(new_vacina), 201
     except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Erro ao cadastrar vacina: {str(e)}")
         return jsonify({"message": f"Erro ao cadastrar vacina: {str(e)}"}), 500
 
 @app.route('/vacinas', methods=['GET'])
@@ -95,6 +111,7 @@ def delete_vacina(id):
         return jsonify({"message": "Vacina removida com sucesso."}), 200
     except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Erro ao remover vacina com ID {id}: {str(e)}")
         return jsonify({"message": f"Erro ao remover vacina: {str(e)}"}), 500
 
 
@@ -118,6 +135,7 @@ def add_pessoa():
         return pessoa_schema.jsonify(new_pessoa), 201
     except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Erro ao cadastrar pessoa: {str(e)}")
         return jsonify({"message": f"Erro ao cadastrar pessoa: {str(e)}"}), 500
 
 @app.route('/pessoas', methods=['GET'])
@@ -145,6 +163,7 @@ def delete_pessoa(id):
         return jsonify({"message": "Pessoa e seu cartão de vacinação removidos com sucesso."}), 200
     except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Erro ao remover pessoa com ID {id}: {str(e)}")
         return jsonify({"message": f"Erro ao remover pessoa: {str(e)}"}), 500
 
 
@@ -171,7 +190,7 @@ def add_vacinacao():
             return jsonify({"message": "Vacina não encontrada."}), 404
 
         # Validação da dose (exemplo básico, pode ser mais complexo)
-        doses_validas = ["1a Dose", "2a Dose", "3a Dose", "Reforco", "Dose Unica", "BCG", "Faltoso", "4a Dose", "5a Dose", "1a Reforco", "2a Reforco"] # Adicionado as doses de reforço aqui também para consistência
+        doses_validas = ["1a Dose", "2a Dose", "3a Dose", "Reforco", "Dose Unica", "BCG", "Faltoso", "4a Dose", "5a Dose", "1a Reforco", "2a Reforco"]
         if dose_aplicada not in doses_validas:
              return jsonify({"message": f"Dose '{dose_aplicada}' inválida. Doses válidas: {', '.join(doses_validas)}"}), 400
 
@@ -189,7 +208,7 @@ def add_vacinacao():
             try:
                 data_aplicacao = datetime.strptime(data_aplicacao_str, '%Y-%m-%dT%H:%M:%S')
             except ValueError:
-                return jsonify({"message": "Formato de data inválido. Use YYYY-MM-DDTHH:MM:SS"}), 400
+                return jsonify({"message": "Formato de data inválido. Use%Y-%m-%dT%H:%M:%S"}), 400
         else:
             data_aplicacao = datetime.utcnow()
 
@@ -204,6 +223,7 @@ def add_vacinacao():
         return vacinacao_schema.jsonify(new_vacinacao), 201
     except Exception as e:
         db.session.rollback()
+        app.logger.error(f"Erro ao cadastrar vacinação: {str(e)}")
         return jsonify({"message": f"Erro ao cadastrar vacinação: {str(e)}"}), 500
 
 # Consultar o cartão de vacinação de uma pessoa
@@ -213,8 +233,8 @@ def get_cartao_vacinacao(pessoa_id):
     if not pessoa:
         return jsonify({"message": "Pessoa não encontrada."}), 404
 
-    # Usa `join` para buscar os nomes das vacinas diretamente
-    vacinacoes = db.session.query(Vacinacao, Vacina.nome)\
+    # Usa `join` para buscar os nomes das vacinas e seus IDs diretamente do banco
+    vacinacoes = db.session.query(Vacinacao, Vacina.nome, Vacina.id.label('vacina_db_id'))\
                            .join(Vacina)\
                            .filter(Vacinacao.pessoa_id == pessoa_id)\
                            .order_by(Vacinacao.data_aplicacao.asc())\
@@ -226,10 +246,10 @@ def get_cartao_vacinacao(pessoa_id):
     }
 
     vacinas_agrupadas = {}
-    for vacinacao_obj, vacina_nome in vacinacoes:
+    for vacinacao_obj, vacina_nome, vacina_db_id in vacinacoes:
         if vacina_nome not in vacinas_agrupadas:
             vacinas_agrupadas[vacina_nome] = {
-                "id_vacina": vacina_id, # Usar vacinacao_obj.vacina_id aqui
+                "id_vacina": vacina_db_id,
                 "nome_vacina": vacina_nome,
                 "doses": []
             }
@@ -239,14 +259,8 @@ def get_cartao_vacinacao(pessoa_id):
             "dose_aplicada": vacinacao_obj.dose_aplicada
         })
 
-    # Convertendo o dicionário para uma lista para a resposta JSON
+    # Convertendo o dicionário de vacinas agrupadas para uma lista para a resposta JSON
     for vacina_nome, data in vacinas_agrupadas.items():
-        # Corrigindo o id_vacina aqui, para pegar do objeto vacinacao_obj
-        # Note que se a vacina não tem nenhum registro, ela não aparecerá aqui.
-        # Mas para o propósito do cartão, apenas vacinas com doses registradas importam.
-        first_vacinacao_for_vacina = next((v for v, _ in vacinacoes if v.vacina.nome == vacina_nome), None)
-        if first_vacinacao_for_vacina:
-             data["id_vacina"] = first_vacinacao_for_vacina.vacina_id
         cartao_vacinacao_data["vacinas_registradas"].append(data)
 
 
@@ -265,7 +279,10 @@ def delete_vacinacao(id):
         return jsonify({"message": "Registro de vacinação removido com sucesso."}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"message": f"Erro ao remover registro de vacinação: {str(e)}"}), 500
+        # Registrar o erro detalhado no log do servidor
+        app.logger.error(f"Erro no backend ao remover vacinação com ID {id}: {str(e)}")
+        # Retornar uma mensagem de erro genérica para o frontend
+        return jsonify({"message": "Falha ao remover o registro de vacinação. Tente novamente."}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
