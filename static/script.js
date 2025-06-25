@@ -5,6 +5,7 @@ const API_BASE_URL = 'http://127.0.0.1:5000'; // Endereço da sua API Flask
 let currentPessoaId = null;
 let allVacinas = []; // Para armazenar todas as vacinas disponíveis
 let deleteTarget = { type: null, id: null }; // Para o modal de confirmação de exclusão
+let currentCartaoData = null; // Para armazenar os dados do cartão de vacinação atual
 
 document.addEventListener('DOMContentLoaded', () => {
     loadPessoas(); // Carrega as pessoas ao carregar a página
@@ -62,6 +63,8 @@ async function loadPessoas() {
             option.textContent = `${pessoa.nome} (ID: ${pessoa.id})`;
             pessoaSelect.appendChild(option);
         });
+        // Esconde o botão de exclusão de pessoa se não houver pessoa selecionada
+        document.getElementById('deletePessoaButton').style.display = 'none';
     } catch (error) {
         console.error('Erro ao carregar pessoas:', error);
     }
@@ -73,24 +76,28 @@ async function loadPessoaCartao() {
     const currentPessoaNomeSpan = document.getElementById('currentPessoaNome');
     const currentPessoaIdSpan = document.getElementById('currentPessoaId');
     const currentPessoaIdentificacaoSpan = document.getElementById('currentPessoaIdentificacao');
+    const deletePessoaButton = document.getElementById('deletePessoaButton'); // Referência ao botão
 
     if (!currentPessoaId) {
         cartaoSection.style.display = 'none';
         currentPessoaNomeSpan.textContent = '';
         currentPessoaIdSpan.textContent = '';
         currentPessoaIdentificacaoSpan.textContent = '';
+        currentCartaoData = null; // Limpa os dados do cartão quando nenhuma pessoa está selecionada
+        deletePessoaButton.style.display = 'none'; // Oculta o botão se nada estiver selecionado
         return;
     }
 
     try {
-        const cartaoData = await fetchData(`${API_BASE_URL}/pessoas/${currentPessoaId}/cartao_vacinacao`);
-        const pessoa = cartaoData.pessoa;
-        const vacinasRegistradas = cartaoData.vacinas_registradas;
+        currentCartaoData = await fetchData(`${API_BASE_URL}/pessoas/${currentPessoaId}/cartao_vacinacao`); // Armazena os dados
+        const pessoa = currentCartaoData.pessoa;
+        const vacinasRegistradas = currentCartaoData.vacinas_registradas;
 
         currentPessoaNomeSpan.textContent = pessoa.nome;
         currentPessoaIdSpan.textContent = pessoa.id;
         currentPessoaIdentificacaoSpan.textContent = pessoa.numero_identificacao;
         cartaoSection.style.display = 'block';
+        deletePessoaButton.style.display = 'inline-block'; // Mostra o botão quando a pessoa está selecionada
 
         renderCartaoVacinacaoTable(vacinasRegistradas);
 
@@ -98,6 +105,8 @@ async function loadPessoaCartao() {
         console.error('Erro ao carregar cartão de vacinação:', error);
         alert('Erro ao carregar cartão de vacinação. Verifique se a pessoa existe ou se há um erro na API.');
         cartaoSection.style.display = 'none';
+        currentCartaoData = null; // Limpa os dados em caso de erro
+        deletePessoaButton.style.display = 'none'; // Oculta o botão em caso de erro
     }
 }
 
@@ -130,7 +139,7 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
     // Cabeçalho da tabela
     let headerRow = document.createElement('tr');
     let thDose = document.createElement('th');
-    thDose.textContent = 'Tipo / Dose';
+    thDose.textContent = 'Vacinas / Doses';
     headerRow.appendChild(thDose);
 
     // Array de nomes de vacinas únicos e ordenados (da imagem original)
@@ -155,21 +164,25 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
     });
     thead.appendChild(headerRow);
 
-    // Tipos de doses que queremos exibir nas linhas (agora correspondendo aos valores do HTML e da API)
+    // Tipos de doses que queremos exibir nas linhas (para corresponder à imagem e lógica)
     const dosesTypes = [
         "1a Dose", "2a Dose", "3a Dose",
-        "Reforco", "1a Reforco", "2a Reforco",
+        "1a Reforco", "2a Reforco",
         "Dose Unica", "BCG", "Faltoso", "4a Dose", "5a Dose"
     ];
 
     dosesTypes.forEach(doseType => {
         let row = document.createElement('tr');
         let tdDoseType = document.createElement('td');
-        // Formata o texto da dose para exibição (ex: 1a Dose -> 1ª Dose)
-        let displayDoseType = doseType
-            .replace('a Dose', 'ª Dose')
-            .replace('a Reforco', 'º Reforço')
-            .replace('Unica', 'Única');
+        // Formata o texto da dose para exibição
+        let displayDoseType = doseType;
+        if (doseType === "1a Dose") displayDoseType = "Tipo 1ª Dose";
+        else if (doseType === "2a Dose") displayDoseType = "Tipo 2ª Dose";
+        else if (doseType === "3a Dose") displayDoseType = "Tipo 3ª Dose";
+        else if (doseType === "1a Reforco") displayDoseType = "Tipo 1º Reforço";
+        else if (doseType === "2a Reforco") displayDoseType = "Tipo 2º Reforço";
+        else if (doseType === "Dose Unica") displayDoseType = "Dose Única";
+        
         tdDoseType.textContent = displayDoseType;
         tdDoseType.style.fontWeight = 'bold';
         tdDoseType.style.color = '#007bff';
@@ -183,39 +196,39 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
             const vacinaData = vacinasRegistradasMap[vacinaName];
             let doseFound = false;
             if (vacinaData && vacinaData.doses) {
-                // A comparação agora é direta com o valor exato da API
                 const dose = vacinaData.doses.find(d => d.dose_aplicada === doseType);
 
                 if (dose) {
-                    td.textContent = `Aplicada: ${new Date(dose.data_aplicacao).toLocaleDateString()}`;
-                    td.classList.add('aplicada');
-                    // Botão de exclusão para a dose específica
+                    if (dose.dose_aplicada === 'Faltoso') {
+                        td.textContent = 'Faltoso';
+                        td.classList.add('faltoso');
+                    } else {
+                        td.textContent = `Aplicada: ${new Date(dose.data_aplicacao).toLocaleDateString()}`;
+                        td.classList.add('aplicada');
+                    }
+                    
                     const deleteButton = document.createElement('button');
                     deleteButton.textContent = 'X';
                     deleteButton.style.marginLeft = '5px';
                     deleteButton.style.padding = '2px 5px';
                     deleteButton.style.fontSize = '0.7em';
                     deleteButton.style.backgroundColor = '#dc3545';
-                    deleteButton.style.color = 'white'; // Cor do texto do botão
+                    deleteButton.style.color = 'white';
                     deleteButton.style.borderRadius = '3px';
                     
-                    // console.log para depurar o ID da dose
-                    console.log(`Botão de exclusão criado para Vacina: ${vacinaName}, Dose: ${doseType}, ID da Vacinação: ${dose.id_vacinacao}`); // USANDO dose.id_vacinacao
+                    console.log(`Botão de exclusão criado para Vacina: ${vacinaName}, Dose: ${doseType}, ID da Vacinação: ${dose.id_vacinacao}`);
 
                     deleteButton.onclick = (event) => {
                         event.stopPropagation();
-                        confirmDelete('vacinacao', dose.id_vacinacao); // USANDO dose.id_vacinacao AQUI
+                        confirmDelete('vacinacao', dose.id_vacinacao);
                     };
                     td.appendChild(deleteButton);
-
-                    if (dose.dose_aplicada === 'Faltoso') {
-                        td.classList.add('faltoso');
-                    }
+                    
                     doseFound = true;
                 }
             }
             if (!doseFound) {
-                td.textContent = ''; // Vazio se não houver dose correspondente
+                td.textContent = '';
             }
             row.appendChild(td);
         });
@@ -248,13 +261,8 @@ async function addPessoa() {
     }
 }
 
-// A função addVacina foi removida da UI, e sua lógica foi simplificada aqui,
-// já que o cadastro de vacinas é feito na inicialização do backend.
 async function addVacina() {
-    // Esta função não é mais acionada pela UI, mas mantida como placeholder
-    // caso haja uma forma de adicionar vacinas no futuro (ex: via admin)
     console.log("A função addVacina não é mais acionada pela interface do usuário.");
-    // Remover ou ajustar conforme necessidade futura.
 }
 
 
@@ -264,9 +272,9 @@ async function addVacinacao() {
         return;
     }
 
-    const vacinaId = document.getElementById('vacinacaoVacinaSelect').value;
+    const vacinaId = parseInt(document.getElementById('vacinacaoVacinaSelect').value);
     const doseAplicada = document.getElementById('vacinacaoDose').value;
-    const dataAplicacao = document.getElementById('vacinacaoData').value; // Formato YYYY-MM-DD
+    const dataAplicacao = document.getElementById('vacinacaoData').value;
     const messageElement = document.getElementById('addVacinacaoMessage');
 
     if (!vacinaId || !doseAplicada || !dataAplicacao) {
@@ -274,22 +282,58 @@ async function addVacinacao() {
         return;
     }
 
-    // A API espera YYYY-MM-DDTHH:MM:SS. Pegar a hora atual para ser mais preciso.
+    // VALIDAÇÃO: SEGUNDA DOSE DEPENDE DA PRIMEIRA
+    if (currentCartaoData && currentCartaoData.vacinas_registradas) {
+        const vacinaSelecionadaNome = allVacinas.find(v => v.id === vacinaId).nome;
+        const vacinaRegistro = currentCartaoData.vacinas_registradas.find(v => v.nome_vacina === vacinaSelecionadaNome);
+
+        const dosesAplicadasParaEstaVacina = vacinaRegistro ? vacinaRegistro.doses.map(d => d.dose_aplicada) : [];
+
+        if (doseAplicada === '2a Dose') {
+            const primeiraDoseAplicada = dosesAplicadasParaEstaVacina.includes('1a Dose');
+            if (!primeiraDoseAplicada) {
+                messageElement.textContent = 'Para aplicar a 2ª Dose, a 1ª Dose deve ter sido registrada primeiro.';
+                return;
+            }
+        } else if (doseAplicada === '3a Dose') {
+            const segundaDoseAplicada = dosesAplicadasParaEstaVacina.includes('2a Dose');
+            if (!segundaDoseAplicada) {
+                messageElement.textContent = 'Para aplicar a 3ª Dose, a 2ª Dose deve ter sido registrada primeiro.';
+                return;
+            }
+        } else if (doseAplicada === '1a Reforco') {
+            const doseAnterior = dosesAplicadasParaEstaVacina.some(d => 
+                d === '3a Dose' || d === '2a Dose' || d === '1a Dose' || d === 'Dose Unica' || d === 'BCG'
+            );
+            if (!doseAnterior) {
+                 messageElement.textContent = 'Para aplicar o 1º Reforço, uma dose anterior (1ª, 2ª, 3ª ou Dose Única) deve ter sido registrada para esta vacina.';
+                 return;
+            }
+        } else if (doseAplicada === '2a Reforco') {
+            const primeiroReforcoAplicado = dosesAplicadasParaEstaVacina.includes('1a Reforco');
+            if (!primeiroReforcoAplicado) {
+                messageElement.textContent = 'Para aplicar o 2º Reforço, o 1º Reforço deve ter sido registrado primeiro.';
+                return;
+            }
+        }
+    }
+
+
     const now = new Date();
-    const formattedTime = now.toTimeString().split(' ')[0]; // Ex: "16:30:00"
+    const formattedTime = now.toTimeString().split(' ')[0];
     const formattedDate = `${dataAplicacao}T${formattedTime}`;
 
     try {
         await fetchData(`${API_BASE_URL}/vacinacoes`, 'POST', {
             pessoa_id: parseInt(currentPessoaId),
-            vacina_id: parseInt(vacinaId),
+            vacina_id: vacinaId,
             dose_aplicada: doseAplicada,
             data_aplicacao: formattedDate
         });
         alert('Vacinação registrada com sucesso!');
         closeModal('addVacinacaoModal');
         await loadPessoaCartao(); // Recarregar o cartão da pessoa
-    } catch (error) {
+    }  catch (error) {
         messageElement.textContent = error.message;
     }
 }
@@ -302,7 +346,6 @@ function confirmDelete(type, id) {
     } else if (type === 'pessoa') {
         message = 'Tem certeza que deseja excluir esta pessoa? Todas as suas vacinações também serão excluídas.';
     } else if (type === 'vacina') {
-        // Este caso seria mais complexo na UI, mas a lógica está aqui
         message = 'Tem certeza que deseja excluir esta vacina? Todos os registros de vacinação relacionados a ela também serão excluídos.';
     }
     document.getElementById('confirmDeleteMessage').textContent = message;
@@ -319,20 +362,20 @@ async function executeDelete() {
         } else if (deleteTarget.type === 'pessoa') {
             await fetchData(`${API_BASE_URL}/pessoas/${deleteTarget.id}`, 'DELETE');
             alert('Pessoa excluída com sucesso!');
-            await loadPessoas(); // Recarregar a lista de pessoas
-            currentPessoaId = null; // Limpar a pessoa selecionada
+            await loadPessoas();
+            currentPessoaId = null;
             document.getElementById('pessoaSelect').value = '';
-            loadPessoaCartao(); // Limpar informações do cartão (esconder seção)
+            loadPessoaCartao(); // Limpar informações do cartão
         } else if (deleteTarget.type === 'vacina') {
             await fetchData(`${API_BASE_URL}/vacinas/${deleteTarget.id}`, 'DELETE');
             alert('Vacina excluída com sucesso!');
-            await loadVacinasForSelect(); // Recarregar a lista de vacinas
-            await loadPessoaCartao(); // Recarregar o cartão caso a vacina estivesse nele
+            await loadVacinasForSelect();
+            await loadPessoaCartao();
         }
     } catch (error) {
         alert('Erro ao excluir: ' + error.message);
     } finally {
-        deleteTarget = { type: null, id: null }; // Limpa o target
+        deleteTarget = { type: null, id: null };
     }
 }
 
@@ -345,9 +388,6 @@ function openAddPessoaModal() {
     showModal('addPessoaModal');
 }
 
-// A função openAddVacinaModal foi removida da UI.
-// Removida pois o botão de acionamento não existe mais no HTML.
-
 async function openAddVacinacaoModal() {
     if (!currentPessoaId) {
         alert('Por favor, selecione uma pessoa primeiro para registrar uma vacinação.');
@@ -355,9 +395,93 @@ async function openAddVacinacaoModal() {
     }
     document.getElementById('vacinacaoPessoaNome').textContent = document.getElementById('currentPessoaNome').textContent;
     document.getElementById('addVacinacaoMessage').textContent = '';
-    await loadVacinasForSelect(); // Carrega as vacinas no select
-    // Define a data atual como padrão no input date
-    const today = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+    await loadVacinasForSelect();
+    const today = new Date().toISOString().split('T')[0];
     document.getElementById('vacinacaoData').value = today;
     showModal('addVacinacaoModal');
+}
+
+// Função para exportar dados do cartão de vacinação para CSV
+function exportCartaoVacinacaoToCsv() {
+    if (!currentCartaoData || !currentPessoaId) {
+        alert('Selecione uma pessoa e carregue o cartão de vacinação primeiro para exportar.');
+        return;
+    }
+
+    const pessoa = currentCartaoData.pessoa;
+    const vacinasRegistradas = currentCartaoData.vacinas_registradas;
+
+    let csvContent = "";
+
+    // Cabeçalho CSV
+    const vacinaNamesInOrder = [
+        "BCG", "HEPATITE B", "ANTI-POLIO (SABIN)", "TETRA VALENTE",
+        "TRIPLICE BACTERIANA (DPT)", "HAEMOPHILUS INFLUENZAE",
+        "TRIPLICE ACELULAR", "PNEUMO 10 VALENTE", "MENINGO C", "ROTAVIRUS"
+    ];
+    
+    // Cabeçalho para as doses na primeira coluna
+    let headerRow = "Dose/Vacina";
+    vacinaNamesInOrder.forEach(vacinaName => {
+        headerRow += `;${vacinaName}`;
+    });
+    csvContent += headerRow + "\n";
+
+    // Mapeamento de doses para CSV (usando a mesma ordem de exibição da tabela)
+    const dosesTypes = [
+        "1a Dose", "2a Dose", "3a Dose",
+        "1a Reforco", "2a Reforco",
+        "Dose Unica", "BCG", "Faltoso", "4a Dose", "5a Dose"
+    ];
+
+    dosesTypes.forEach(doseType => {
+        // Formato para CSV igual ao display da tabela
+        let displayDoseTypeCsv = doseType;
+        if (doseType === "1a Dose") displayDoseTypeCsv = "Tipo 1ª Dose";
+        else if (doseType === "2a Dose") displayDoseTypeCsv = "Tipo 2ª Dose";
+        else if (doseType === "3a Dose") displayDoseTypeCsv = "Tipo 3ª Dose";
+        else if (doseType === "1a Reforco") displayDoseTypeCsv = "Tipo 1º Reforço";
+        else if (doseType === "2a Reforco") displayDoseTypeCsv = "Tipo 2º Reforço";
+        else if (doseType === "Dose Unica") displayDoseTypeCsv = "Dose Única";
+            
+        let rowData = `"${displayDoseTypeCsv}"`;
+        vacinaNamesInOrder.forEach(vacinaName => {
+            const vacinaData = vacinasRegistradas.find(v => v.nome_vacina === vacinaName);
+            let cellContent = "";
+            if (vacinaData && vacinaData.doses) {
+                const dose = vacinaData.doses.find(d => d.dose_aplicada === doseType);
+                if (dose) {
+                    if (dose.dose_aplicada === 'Faltoso') {
+                        cellContent = 'Faltoso';
+                    } else {
+                        cellContent = `Aplicada: ${new Date(dose.data_aplicacao).toLocaleDateString()}`;
+                    }
+                }
+            }
+            rowData += `;"${cellContent}"`;
+        });
+        csvContent += rowData + "\n";
+    });
+
+    // Informações da Pessoa no final do CSV para clareza
+    csvContent += "\n";
+    csvContent += `Informações da Pessoa;\n`;
+    csvContent += `Nome:;${pessoa.nome}\n`;
+    csvContent += `ID:;${pessoa.id}\n`;
+    csvContent += `Identificação:;${pessoa.numero_identificacao}\n`;
+
+
+    // Cria um Blob e dispara o download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `cartao_vacinacao_${pessoa.nome.replace(/\s/g, '_')}_${pessoa.id}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        document.body.removeChild(link);
+    } else {
+        alert('Seu navegador não suporta download direto de arquivos. Por favor, copie o conteúdo.');
+    }
 }

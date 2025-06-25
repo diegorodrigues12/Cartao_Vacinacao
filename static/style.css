@@ -1,128 +1,436 @@
 /* cartao_vacinacao_api/static/style.css */
+
+/* Inter Font (Google Fonts) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 body {
-    font-family: Arial, sans-serif;
-    margin: 20px;
-    background-color: #f4f4f4;
+    font-family: 'Inter', Arial, sans-serif;
+    margin: 0; /* Remove margem padrão do body */
+    background-color: #f0f0f0; /* Cor de fundo mais clara */
     color: #333;
+    display: flex; /* Para centralizar o conteúdo verticalmente */
+    flex-direction: column;
+    min-height: 100vh; /* Garante que o body ocupe a altura total da viewport */
 }
 
+/* --- Header Top Bar (Simulando a aba "Vacina") --- */
+.header-top-bar {
+    background-color: #e0e0e0;
+    padding: 0;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid #c0c0c0;
+}
+
+.header-tab {
+    background-color: #fff;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    padding: 10px 20px;
+    display: inline-block;
+    font-weight: bold;
+    color: #0056b3;
+    border: 1px solid #c0c0c0;
+    border-bottom: none;
+    position: relative;
+    top: 1px;
+    margin-left: 20px; /* Alinha com a lateral do container principal */
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.05);
+}
+
+/* --- Container Principal --- */
 .container {
     max-width: 1200px;
-    margin: 0 auto;
+    margin: 20px auto; /* Centraliza e adiciona margem superior/inferior */
     background-color: #fff;
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.15); /* Sombra mais pronunciada */
+    flex-grow: 1; /* Permite que o container cresça para preencher o espaço disponível */
 }
 
-h1, h2 {
+h1 {
     color: #0056b3;
+    text-align: center;
+    margin-bottom: 30px;
 }
 
-input[type="text"], input[type="date"], select, button {
-    padding: 8px;
+h2 {
+    color: #0056b3;
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+/* --- Seções de Card (Informações do Usuário, Carteira de Vacinação) --- */
+.user-info-card,
+.vacinacao-card {
+    background-color: #f8f8f8; /* Cor de fundo mais clara para o card */
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 30px;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05); /* Sombra interna para profundidade */
+    border: 1px solid #ddd; /* Borda sutil */
+}
+
+.info-line {
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Espaço entre os elementos na linha */
+    margin-bottom: 10px;
+}
+
+.info-line label {
+    font-weight: bold;
+    min-width: 80px; /* Para alinhar labels */
+}
+
+.user-details p {
     margin: 5px 0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    display: inline-block;
+    padding-left: 95px; /* Alinha com os inputs acima */
+}
+
+/* O elemento .more-info-toggle foi removido do HTML */
+
+/* --- Elementos de Formulário e Botões --- */
+input[type="text"],
+input[type="date"],
+select {
+    padding: 10px 12px;
+    margin: 5px 0;
+    border: 1px solid #c0c0c0;
+    border-radius: 5px;
+    font-size: 1em;
+    flex-grow: 1; /* Permite que inputs e selects ocupem o espaço disponível */
+    max-width: 300px; /* Limita largura para melhor aparência */
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08); /* Sombra interna sutil */
 }
 
 button {
-    background-color: #007bff;
+    background: linear-gradient(to bottom, #007bff, #0056b3); /* Gradiente */
     color: white;
     cursor: pointer;
     border: none;
-    padding: 10px 15px;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-weight: bold;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Sombra para botões */
+    transition: all 0.2s ease-in-out;
 }
 
 button:hover {
-    background-color: #0056b3;
+    background: linear-gradient(to bottom, #0056b3, #003a7a);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    transform: translateY(-1px);
 }
 
+button:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Menu de Abas (Simulado para "Carteira Nacional de Vacinação") --- */
+.tab-menu {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #ccc;
+    background-color: #e0e0e0; /* Cor de fundo para a barra de abas */
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    overflow: hidden; /* Garante que as bordas arredondadas funcionem */
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tab-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    font-weight: 500;
+    color: #555;
+    background-color: #f0f0f0;
+    border-right: 1px solid #ccc;
+    transition: all 0.3s ease;
+    border-top-left-radius: 5px; /* Bordas arredondadas para abas */
+    border-top-right-radius: 5px;
+    position: relative; /* Para a borda inferior */
+    flex-shrink: 0; /* Previne que as abas encolham */
+}
+
+.tab-item:last-child {
+    border-right: none;
+}
+
+.tab-item:hover {
+    background-color: #e5e5e5;
+    color: #333;
+}
+
+.tab-item.active {
+    background-color: #fff;
+    color: #0056b3;
+    border-bottom: 2px solid #0056b3; /* Borda inferior azul para a aba ativa */
+    z-index: 1; /* Para sobrepor a borda inferior do tab-menu */
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    transform: translateY(-2px); /* Efeito de "levantar" */
+}
+
+/* --- Tabela de Vacinas Container --- */
+.table-responsive-container {
+    overflow-x: auto; /* Adiciona rolagem horizontal se o conteúdo for maior que o container */
+    border-radius: 8px; /* Mantém as bordas arredondadas */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); /* Mantém a sombra */
+    margin-top: 20px; /* Mantém a margem */
+}
+
+/* --- Tabela de Vacinas --- */
 table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
+    width: 100%; /* Garante que a tabela tente ocupar 100% da largura do seu container */
+    min-width: 800px; /* Largura mínima para evitar que as colunas fiquem muito apertadas */
+    border-collapse: separate;
+    border-spacing: 0;
+    /* Remover margin-top e box-shadow daqui, pois já estão no .table-responsive-container */
+    /* Remover border-radius e overflow: hidden daqui também */
 }
 
 th, td {
-    border: 1px solid #ddd;
-    padding: 8px;
+    border: 1px solid #e0e0e0;
+    padding: 10px;
     text-align: left;
 }
 
 th {
     background-color: #f2f2f2;
+    font-weight: bold;
+    color: #555;
+    text-transform: uppercase;
+    font-size: 0.9em;
+    vertical-align: middle;
 }
 
-.info-section {
-    margin-bottom: 20px;
-    padding: 15px;
-    background-color: #e9f7ef;
-    border-left: 5px solid #28a745;
-    border-radius: 4px;
+/* Estilo para a coluna "Vacina / Doses" */
+th:first-child {
+    width: 150px; /* Largura fixa para a coluna de doses */
+    background-color: #eef; /* Fundo diferente para a primeira coluna do cabeçalho */
 }
 
+/* Células de nome de vacina no cabeçalho */
 .vacina-cell {
+    background-color: #ffe; /* Fundo amarelado como na imagem */
+    color: #333;
     text-align: center;
     vertical-align: middle;
     font-weight: bold;
+    min-width: 100px; /* Largura mínima para colunas de vacinas */
 }
 
+/* Células de Doses (linhas) */
 .dose-cell {
-    background-color: #f9f9f9;
+    background-color: #fff;
     font-size: 0.9em;
+    white-space: nowrap; /* Evita que o texto quebre */
+    position: relative; /* Para o botão X */
 }
+
+/* Estilo para a primeira célula de cada linha (o tipo de dose) */
+tbody tr td:first-child {
+    background-color: #eef; /* Fundo diferente para a primeira coluna do corpo */
+    font-weight: bold;
+    color: #007bff;
+}
+
 
 .faltoso {
-    background-color: #ffe0e0;
-    color: #d8000c;
+    background-color: #ffe0e0; /* Vermelho claro */
+    color: #d8000c; /* Vermelho escuro */
     font-weight: bold;
+    text-align: center; /* Centraliza "Faltoso" */
 }
 
 .aplicada {
-    background-color: #e0ffe0;
-    color: #28a745;
+    background-color: #e0ffe0; /* Verde claro */
+    color: #28a745; /* Verde escuro */
+    text-align: center; /* Centraliza a data de aplicação */
 }
 
-.buttons-group button {
-    margin-right: 10px;
+.buttons-group {
+    text-align: right; /* Alinha o botão "Registrar Vacinação" à direita */
+    margin-bottom: 20px;
 }
 
-/* Estilos para modais (já estavam no index.html, mas idealmente ficam aqui) */
+/* Estilos para modais (mantidos e aprimorados para o tema) */
 .modal {
     display: none; /* Hidden by default */
     position: fixed; /* Stay in place */
-    z-index: 1; /* Sit on top */
+    z-index: 1000; /* Sit on top */
     left: 0;
     top: 0;
     width: 100%; /* Full width */
     height: 100%; /* Full height */
     overflow: auto; /* Enable scroll if needed */
-    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+    background-color: rgba(0,0,0,0.6); /* Black w/ more opacity */
+    backdrop-filter: blur(3px); /* Efeito de desfoque no fundo */
 }
 
 .modal-content {
     background-color: #fefefe;
-    margin: 15% auto; /* 15% from the top and centered */
-    padding: 20px;
+    margin: 5% auto; /* Ajustado para um pouco mais alto */
+    padding: 30px;
     border: 1px solid #888;
-    width: 80%; /* Could be more or less, depending on screen size */
-    max-width: 500px;
-    border-radius: 8px;
+    width: 90%; /* Mais largura em telas menores */
+    max-width: 550px; /* Limite máximo */
+    border-radius: 10px; /* Bordas mais arredondadas */
     position: relative;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3); /* Sombra mais forte */
+    animation: fadeIn 0.3s ease-out; /* Animação ao abrir */
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .close-button {
     color: #aaa;
     float: right;
-    font-size: 28px;
+    font-size: 32px;
     font-weight: bold;
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    transition: color 0.2s ease;
 }
 
 .close-button:hover,
 .close-button:focus {
-    color: black;
+    color: #333;
     text-decoration: none;
     cursor: pointer;
+}
+
+.modal-content h3 {
+    color: #0056b3;
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 20px;
+}
+
+.modal-content label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #555;
+}
+
+.modal-content input[type="text"],
+.modal-content input[type="date"],
+.modal-content select {
+    width: calc(100% - 24px); /* Full width ajustado para padding */
+    margin-bottom: 15px;
+}
+
+.modal-content button {
+    width: auto; /* Botões não ocupam a largura total por padrão */
+    margin-right: 10px;
+    margin-top: 10px;
+}
+
+/* Mensagens de erro em modais */
+p[id$="Message"] {
+    font-size: 0.9em;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+
+/* --- Barra de Navegação Inferior (AJUSTADO: sem setas) --- */
+.bottom-nav {
+    display: flex;
+    justify-content: flex-end; /* Alinha os itens à direita */
+    align-items: center;
+    padding: 10px 0;
+    margin-top: 30px;
+    border-top: 1px solid #eee;
+    background-color: #f8f8f8;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.nav-dots {
+    display: none; /* OCULTADO: Bolinhas de navegação, pois as setas foram removidas e não há navegação de fato */
+}
+
+/* As setas .nav-arrow foram removidas do HTML */
+
+.print-button {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-right: 20px; /* Margem à direita para o botão de impressão */
+    box-shadow: none;
+    color: #555;
+    transition: color 0.2s ease;
+}
+
+.print-button:hover {
+    color: #0056b3;
+    transform: translateY(0); /* Remove o efeito de hover padrão do botão */
+    box-shadow: none;
+}
+
+.print-button svg {
+    width: 24px;
+    height: 24px;
+    vertical-align: middle;
+}
+
+/* Responsividade Básica */
+@media (max-width: 768px) {
+    .container {
+        margin: 10px;
+        padding: 15px;
+    }
+    .info-line {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .info-line label {
+        min-width: unset;
+    }
+    .user-details p {
+        padding-left: 0;
+    }
+    .tab-menu {
+        flex-wrap: wrap; /* Permite que as abas quebrem em várias linhas */
+    }
+    .tab-item {
+        border-right: none; /* Remove bordas entre abas empilhadas */
+        width: 100%; /* Ocupa largura total */
+        text-align: center;
+        border-bottom: 1px solid #ccc;
+    }
+    .tab-item.active {
+        transform: translateY(0); /* Remove efeito de "levantar" em mobile */
+    }
+    .bottom-nav {
+        justify-content: center; /* Centraliza os itens em telas menores */
+    }
+    .print-button {
+        margin-right: 0; /* Remove margem para centralizar */
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-content {
+        width: 95%;
+        margin: 10% auto;
+    }
+    .modal-content button {
+        width: 100%;
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+    .buttons-group {
+        text-align: center;
+    }
 }

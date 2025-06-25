@@ -7,50 +7,82 @@
     <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
+    <!-- Header simulando a aba "Vacina" -->
+    <div class="header-top-bar">
+        <div class="header-tab active">Vacina</div>
+    </div>
+
     <div class="container">
         <h1>Gerenciamento de Cartão de Vacinação</h1>
 
-        <!-- Seção de Seleção/Cadastro de Pessoa -->
-        <div class="info-section">
-            <h2>Informações do Usuário</h2>
-            <label for="pessoaSelect">Selecionar Pessoa:</label>
-            <select id="pessoaSelect" onchange="loadPessoaCartao()">
-                <option value="">-- Selecione uma pessoa --</option>
-            </select>
-            <button onclick="openAddPessoaModal()">Cadastrar Nova Pessoa</button>
+        <!-- Seção de Informações do Usuário -->
+        <div class="info-section user-info-card">
+            <h2>Informações do Usuário:</h2>
+            <div class="info-line">
+                <label for="pessoaSelect">Nome:</label>
+                <select id="pessoaSelect" onchange="loadPessoaCartao()">
+                    <option value="">-- Selecione uma pessoa --</option>
+                </select>
+                <button onclick="openAddPessoaModal()">Cadastrar Nova Pessoa</button>
+            </div>
 
-            <div id="currentPessoaInfo" style="margin-top: 15px;">
+            <div id="currentPessoaInfo" class="user-details" style="margin-top: 15px;">
                 <p>Nome: <span id="currentPessoaNome"></span></p>
                 <p>ID: <span id="currentPessoaId"></span></p>
                 <p>Identificação: <span id="currentPessoaIdentificacao"></span></p>
+                <!-- NOVO: Botão de exclusão de pessoa -->
+                <button id="deletePessoaButton" style="display: none; background-color: #dc3545;" onclick="confirmDelete('pessoa', currentPessoaId)">Excluir Pessoa</button>
             </div>
         </div>
 
-        <!-- Seção de Vacinas Registradas (Cartão de Vacinação) -->
-        <div id="cartaoVacinacaoSection" style="display: none;">
+        <!-- Seção de Carteira de Vacinação -->
+        <div id="cartaoVacinacaoSection" class="vacinacao-card" style="display: none;">
             <h2>Carteira Nacional de Vacinação</h2>
 
+            <!-- Menu de abas simulado (apenas visual, não funcional para navegação) -->
+            <div class="tab-menu">
+                <div class="tab-item active">Carteira Nacional de Vacinação</div>
+                <div class="tab-item">Anti Rábica</div>
+                <div class="tab-item">BCG de Contato</div>
+                <div class="tab-item">Vacinas Particulares</div>
+                <div class="tab-item">Outra Vacina</div>
+            </div>
+
             <div class="buttons-group" style="margin-bottom: 20px;">
-                <!-- O botão "Cadastrar Nova Vacina" foi removido daqui -->
                 <button onclick="openAddVacinacaoModal()">Registrar Vacinação</button>
             </div>
 
-            <table id="vacinasTable">
-                <thead>
-                    <tr>
-                        <th>Vacina / Doses</th>
-                        <!-- As colunas de vacinas serão geradas via JS -->
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- As linhas de doses e dados serão geradas via JS -->
-                </tbody>
-            </table>
+            <!-- Container responsivo para a tabela -->
+            <div class="table-responsive-container">
+                <table id="vacinasTable">
+                    <thead>
+                        <tr>
+                            <th>Vacina / Doses</th>
+                            <!-- As colunas de vacinas serão geradas via JS -->
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- As linhas de doses e dados serão geradas via JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Barra de navegação inferior -->
+            <div class="bottom-nav">
+                <!-- setas de navegação foram removidas -->
+                <div class="nav-dots">
+                    <span class="dot active"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+                <button class="print-button" onclick="exportCartaoVacinacaoToCsv()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-printer"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                </button>
+            </div>
         </div>
     </div>
 
     <!-- Modais (Pop-ups) -->
-
     <!-- Modal para Adicionar Pessoa -->
     <div id="addPessoaModal" class="modal">
         <div class="modal-content">
@@ -64,8 +96,6 @@
             <p id="addPessoaMessage" style="color: red;"></p>
         </div>
     </div>
-
-    <!-- O Modal para Adicionar Vacina foi removido daqui -->
 
     <!-- Modal para Registrar Vacinação -->
     <div id="addVacinacaoModal" class="modal">
@@ -82,11 +112,11 @@
                 <option value="1a Dose">1ª Dose</option>
                 <option value="2a Dose">2ª Dose</option>
                 <option value="3a Dose">3ª Dose</option>
-                <option value="Reforco">Reforço</option> <!-- Padronizado: Reforco -->
-                <option value="1a Reforco">1º Reforço</option> <!-- Adicionado e Padronizado -->
-                <option value="2a Reforco">2º Reforço</option> <!-- Adicionado e Padronizado -->
-                <option value="Dose Unica">Dose Única</option> <!-- Padronizado: Dose Unica -->
-                <option value="BCG">BCG (para a vacina BCG)</option>
+                <option value="Reforco">Reforço</option>
+                <option value="1a Reforco">1º Reforço</option>
+                <option value="2a Reforco">2º Reforço</option>
+                <option value="Dose Unica">Dose Única</option>
+                <option value="BCG">BCG</option>
                 <option value="Faltoso">Faltoso</option>
                 <option value="4a Dose">4ª Dose</option>
                 <option value="5a Dose">5ª Dose</option>
