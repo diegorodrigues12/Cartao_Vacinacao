@@ -1,15 +1,17 @@
 # cartao_vacinacao_api/app.py
 from flask import Flask, request, jsonify, render_template
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity # NOVAS IMPORTAÇÕES JWT
 from config import Config
-from models import db, Vacina, Pessoa, Vacinacao
+from models import db, Vacina, Pessoa, Vacinacao # O modelo User será adicionado em models.py
 from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema
-from datetime import datetime
+from datetime import datetime, timedelta # timedelta para expiração do token
 import os
 import logging
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Configurar logging básico
 if not app.debug:
     file_handler = logging.FileHandler('error.log')
     file_handler.setLevel(logging.WARNING)
@@ -17,6 +19,9 @@ if not app.debug:
 
 db.init_app(app)
 ma.init_app(app)
+
+# Inicializa JWTManager
+jwt = JWTManager(app) # NOVA LINHA: Inicialização do JWT
 
 VacinaSchema.Meta.sqla_session = db.session
 PessoaSchema.Meta.sqla_session = db.session
@@ -33,7 +38,7 @@ vacinacoes_schema = VacinacaoSchema(many=True)
 with app.app_context():
     db.create_all()
 
-    # Vacinas iniciais com categorias (ATUALIZADO)
+    # Vacinas iniciais com categorias
     initial_vacinas_data = [
         {"nome": "BCG", "categoria": "Nacional"},
         {"nome": "HEPATITE B", "categoria": "Nacional"},
@@ -47,8 +52,11 @@ with app.app_context():
         {"nome": "ROTAVIRUS", "categoria": "Nacional"},
         {"nome": "Anti Rábica Humana", "categoria": "Anti Rábica"},
         {"nome": "BCG Contato", "categoria": "BCG de Contato"},
-        {"nome": "Gripe (Particular)", "categoria": "Vacinas Particulares"},
-        {"nome": "Febre Amarela (Outra)", "categoria": "Outra Vacina"},
+        {"nome": "Gripe Quadrivalente", "categoria": "Vacinas Particulares"},
+        {"nome": "HPV Nonavalente", "categoria": "Vacinas Particulares"},
+        {"nome": "Meningocócica ACWY", "categoria": "Vacinas Particulares"},
+        {"nome": "Febre Amarela (Reforço)", "categoria": "Outra Vacina"},
+        {"nome": "Dengue Qdenga", "categoria": "Outra Vacina"},
     ]
 
     for vacina_info in initial_vacinas_data:
@@ -67,7 +75,6 @@ with app.app_context():
             print(f"Vacina '{vacina_nome}' adicionada ao banco de dados com categoria '{vacina_categoria}'.")
     db.session.commit()
     print("Vacinas iniciais populadas ou atualizadas.")
-
 
 # --- Manipulador de Erro Global ---
 @app.errorhandler(500)
@@ -90,7 +97,7 @@ def add_vacina():
             return jsonify({"message": "Dados inválidos: 'nome' da vacina é obrigatório."}), 400
 
         nome = data['nome']
-        categoria = data.get('categoria', 'Geral') # Permite categoria opcional no POST
+        categoria = data.get('categoria', 'Geral')
         
         if Vacina.query.filter_by(nome=nome).first():
             return jsonify({"message": f"Vacina '{nome}' já existe."}), 409
@@ -106,7 +113,6 @@ def add_vacina():
 
 @app.route('/vacinas', methods=['GET'])
 def get_vacinas():
-    # NOVO: Permite filtrar por categoria
     categoria = request.args.get('categoria')
     if categoria:
         all_vacinas = Vacina.query.filter_by(categoria=categoria).all()
@@ -267,12 +273,12 @@ def get_cartao_vacinacao(pessoa_id):
     }
 
     vacinas_agrupadas = {}
-    for vacinacao_obj, vacina_nome, vacina_db_id, vacina_categoria in vacinacoes: # NOVO: Captura categoria
+    for vacinacao_obj, vacina_nome, vacina_db_id, vacina_categoria in vacinacoes:
         if vacina_nome not in vacinas_agrupadas:
             vacinas_agrupadas[vacina_nome] = {
                 "id_vacina": vacina_db_id,
                 "nome_vacina": vacina_nome,
-                "categoria_vacina": vacina_categoria, # NOVO: Adiciona categoria aqui
+                "categoria_vacina": vacina_categoria,
                 "doses": []
             }
         vacinas_agrupadas[vacina_nome]["doses"].append({

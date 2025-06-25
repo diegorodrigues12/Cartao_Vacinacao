@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash # NOVA IMPORTAÇÃO para senhas
 
 db = SQLAlchemy()
 
@@ -7,7 +8,7 @@ class Vacina(db.Model):
     __tablename__ = 'vacinas'
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), unique=True, nullable=False)
-    categoria = db.Column(db.String(100), nullable=False, default='Geral') # NOVO: Campo categoria
+    categoria = db.Column(db.String(100), nullable=False, default='Geral') # Campo categoria
 
     # Relacionamento com Vacinacao
     vacinacoes = db.relationship('Vacinacao', backref='vacina', lazy=True, cascade="all, delete-orphan")
@@ -39,3 +40,21 @@ class Vacinacao(db.Model):
 
     def __repr__(self):
         return f"<Vacinacao Pessoa_ID:{self.pessoa_id} Vacina_ID:{self.vacina_id} Dose:{self.dose_aplicada}>"
+
+# NOVO: Modelo de Usuário para Autenticação
+class User(db.Model):
+    __tablename__ = 'users' # Nome da tabela no banco de dados
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False) # Armazena o hash da senha
+
+    # Método para definir a senha (faz o hash)
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    # Método para verificar a senha
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f"<User {self.username}>"
