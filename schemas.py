@@ -18,10 +18,6 @@ class PessoaSchema(ma.SQLAlchemyAutoSchema):
         sqla_session = None
 
 class VacinacaoSchema(ma.SQLAlchemyAutoSchema):
-    # A linha abaixo precisa ser alterada
-    # data_aplicacao = ma.fields.DateTime(format='%Y-%m-%dT%H:%M:%S')
-
-    # Para esta:
     data_aplicacao = fields.DateTime(format='%Y-%m-%dT%H:%M:%S')
 
     class Meta:
@@ -36,12 +32,8 @@ class UserSchema(ma.SQLAlchemyAutoSchema):
         load_instance = True
         sqla_session = None # Será definido no app.py
         # Campos que devem ser visíveis ou carregáveis.
-        # É crucial NÃO expor password_hash diretamente via API.
-        load_only = ("password",) # Campo 'password' para carregamento (input), não exibição
-        dump_only = ("id", "password_hash",) # Campo 'id' e 'password_hash' apenas para exibição (mas password_hash não deve ser dumpado em produção)
-        # Atenção: 'password_hash' deve ser apenas para uso interno e não deve ser exposto em APIs de produção.
-        # dump_only geralmente incluiria apenas o 'id' e 'username'.
-        # Para produção, você pode definir 'fields = ("id", "username")' explicitamente.
-
-# Adicione a instanciação do UserSchema no app.py depois de adicionar este schema
-# user_schema = UserSchema()
+        # 'password' é 'load_only' (apenas para entrada)
+        load_only = ("password",) 
+        # 'id' e 'username' são 'dump_only' (apenas para saída)
+        # NUNCA inclua 'password_hash' em 'dump_only' em produção, pois ele exporia o hash da senha.
+        dump_only = ("id", "username",) # Expondo apenas id e username na saída JSON

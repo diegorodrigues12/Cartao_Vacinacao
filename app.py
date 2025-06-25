@@ -2,8 +2,8 @@
 from flask import Flask, request, jsonify, render_template
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity # NOVAS IMPORTAÇÕES JWT
 from config import Config
-from models import db, Vacina, Pessoa, Vacinacao # O modelo User será adicionado em models.py
-from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema
+from models import db, Vacina, Pessoa, Vacinacao, User # ATUALIZADO: Importado User
+from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema, UserSchema # ATUALIZADO: Importado UserSchema
 from datetime import datetime, timedelta # timedelta para expiração do token
 import os
 import logging
@@ -11,7 +11,6 @@ import logging
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Configurar logging básico
 if not app.debug:
     file_handler = logging.FileHandler('error.log')
     file_handler.setLevel(logging.WARNING)
@@ -20,19 +19,22 @@ if not app.debug:
 db.init_app(app)
 ma.init_app(app)
 
-# Inicializa JWTManager
 jwt = JWTManager(app) # NOVA LINHA: Inicialização do JWT
 
+# Definir a sessão do SQLAlchemy para os schemas
 VacinaSchema.Meta.sqla_session = db.session
 PessoaSchema.Meta.sqla_session = db.session
 VacinacaoSchema.Meta.sqla_session = db.session
+UserSchema.Meta.sqla_session = db.session # NOVA LINHA: Associa UserSchema ao db.session
 
+# Instancia os schemas
 vacina_schema = VacinaSchema()
 vacinas_schema = VacinaSchema(many=True)
 pessoa_schema = PessoaSchema()
 pessoas_schema = PessoaSchema(many=True)
 vacinacao_schema = VacinacaoSchema()
 vacinacoes_schema = VacinacaoSchema(many=True)
+user_schema = UserSchema() # NOVA LINHA: Instancia o UserSchema
 
 # Cria as tabelas no banco de dados se elas não existirem e popula vacinas iniciais
 with app.app_context():
@@ -82,7 +84,41 @@ def internal_server_error(e):
     app.logger.exception("Ocorreu uma exceção não tratada durante uma requisição.")
     return jsonify({"message": "Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde."}), 500
 
-# --- Rotas da API ---
+# --- Rotas de Autenticação (NOVAS) ---
+@app.route('/register', methods=['POST'])
+def register():
+    username = request.json.get('username', None)
+    password = request.json.get('password', None)
+
+    if not username or not password:
+        return jsonify({"message": "Username e password são obrigatórios"}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({"message": "Usuário já existe"}), 409 # Conflict
+
+    new_user = User(username=username)
+    new_user.set_password(password) # Hash da senha
+    
+    db.session.add(new_user)
+    db.session.commit()
+    
+    return jsonify({"message": "Usuário registrado com sucesso"}), 201
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.json.get('username', None)
+    password = request.json.get('password', None)
+
+    user = User.query.filter_by(username=username).first()
+
+    if user is None or not user.check_password(password):
+        return jsonify({"message": "Username ou password inválidos"}), 401 # Unauthorized
+
+    # Se login bem-sucedido, cria um token de acesso
+    access_token = create_access_token(identity=user.id)
+    return jsonify(access_token=access_token), 200
+
+# --- Rotas da API (Existentes) ---
 
 @app.route('/')
 def serve_index():
