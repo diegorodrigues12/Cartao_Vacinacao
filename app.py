@@ -140,3 +140,113 @@ def delete_pessoa(id):
         return jsonify({"message": f"Erro ao remover pessoa: {str(e)}"}), 500
 
 # ... (restante do código)
+# ... (código anterior)
+
+# 3. Rotas para Vacinações
+@app.route('/vacinacoes', methods=['POST'])
+def add_vacinacao():
+    try:
+        data = request.get_json()
+        required_fields = ['pessoa_id', 'vacina_id', 'dose_aplicada']
+        if not all(field in data for field in required_fields):
+            return jsonify({"message": f"Dados inválidos: {', '.join(required_fields)} são obrigatórios."}), 400
+
+        pessoa_id = data['pessoa_id']
+        vacina_id = data['vacina_id']
+        dose_aplicada = data['dose_aplicada']
+        data_aplicacao_str = data.get('data_aplicacao')
+
+        pessoa = Pessoa.query.get(pessoa_id)
+        if not pessoa:
+            return jsonify({"message": "Pessoa não encontrada."}), 404
+
+        vacina = Vacina.query.get(vacina_id)
+        if not vacina:
+            return jsonify({"message": "Vacina não encontrada."}), 404
+
+        # Validação da dose (exemplo básico, pode ser mais complexo)
+        doses_validas = ["1a Dose", "2a Dose", "3a Dose", "Reforço", "Dose Única", "BCG", "Faltoso", "4a Dose", "5a Dose"] # Adicionado mais algumas doses comuns
+        if dose_aplicada not in doses_validas:
+             return jsonify({"message": f"Dose '{dose_aplicada}' inválida. Doses válidas: {', '.join(doses_validas)}"}), 400
+
+        # Verifica se já existe uma vacinação com a mesma pessoa, vacina e dose
+        existing_vacinacao = Vacinacao.query.filter_by(
+            pessoa_id=pessoa_id,
+            vacina_id=vacina_id,
+            dose_aplicada=dose_aplicada
+        ).first()
+
+        if existing_vacinacao:
+            return jsonify({"message": f"Essa dose ('{dose_aplicada}') da vacina '{vacina.nome}' já foi registrada para esta pessoa."}), 409
+
+        if data_aplicacao_str:
+            try:
+                data_aplicacao = datetime.strptime(data_aplicacao_str, '%Y-%m-%dT%H:%M:%S')
+            except ValueError:
+                return jsonify({"message": "Formato de data inválido. Use YYYY-MM-DDTHH:MM:SS"}), 400
+        else:
+            data_aplicacao = datetime.utcnow()
+
+        new_vacinacao = Vacinacao(
+            pessoa_id=pessoa_id,
+            vacina_id=vacina_id,
+            data_aplicacao=data_aplicacao,
+            dose_aplicada=dose_aplicada
+        )
+        db.session.add(new_vacinacao)
+        db.session.commit()
+        return vacinacao_schema.jsonify(new_vacinacao), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"Erro ao cadastrar vacinação: {str(e)}"}), 500
+
+# Consultar o cartão de vacinação de uma pessoa
+@app.route('/pessoas/<int:pessoa_id>/cartao_vacinacao', methods=['GET'])
+def get_cartao_vacinacao(pessoa_id):
+    pessoa = Pessoa.query.get(pessoa_id)
+    if not pessoa:
+        return jsonify({"message": "Pessoa não encontrada."}), 404
+
+    vacinacoes = Vacinacao.query.filter_by(pessoa_id=pessoa_id).order_by(Vacinacao.data_aplicacao.asc()).all()
+
+    cartao_vacinacao_data = {
+        "pessoa": pessoa_schema.dump(pessoa),
+        "vacinas_registradas": []
+    }
+
+    vacinas_agrupadas = {}
+    for vacinacao in vacinacoes:
+        vacina_nome = vacinacao.vacina.nome
+        if vacina_nome not in vacinas_agrupadas:
+            vacinas_agrupadas[vacina_nome] = {
+                "id_vacina": vacinacao.vacina_id, # Adicionado o ID da vacina para facilitar
+                "nome_vacina": vacina_nome,
+                "doses": []
+            }
+        vacinas_agrupadas[vacina_nome]["doses"].append({
+            "id_vacinacao": vacinacao.id,
+            "data_aplicacao": vacinacao.data_aplicacao.isoformat(),
+            "dose_aplicada": vacinacao.dose_aplicada
+        })
+
+    for vacina_nome, data in vacinas_agrupadas.items():
+        cartao_vacinacao_data["vacinas_registradas"].append(data)
+
+    return jsonify(cartao_vacinacao_data), 200
+
+# Excluir registro de vacinação específico
+@app.route('/vacinacoes/<int:id>', methods=['DELETE'])
+def delete_vacinacao(id):
+    vacinacao = Vacinacao.query.get(id)
+    if not vacinacao:
+        return jsonify({"message": "Registro de vacinação não encontrado."}), 404
+
+    try:
+        db.session.delete(vacinacao)
+        db.session.commit()
+        return jsonify({"message": "Registro de vacinação removido com sucesso."}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"Erro ao remover registro de vacinação: {str(e)}"}), 500
+
+# ... (restante do código)

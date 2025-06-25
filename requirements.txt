@@ -1,5 +1,5 @@
-Flask==2.3.3
-Flask-SQLAlchemy==3.0.5
-Flask-Marshmallow==0.14.0
-marshmallow-sqlalchemy==0.29.0
-python-dotenv==1.0.0
+Flask
+Flask-SQLAlchemy
+Flask-Marshmallow
+marshmallow-sqlalchemy
+python-dotenv

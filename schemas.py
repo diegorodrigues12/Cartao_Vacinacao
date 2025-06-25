@@ -1,7 +1,7 @@
-# cartao_vacinacao_api/schemas.py
 from flask_marshmallow import Marshmallow
 from models import Vacina, Pessoa, Vacinacao
-from datetime import datetime # Importar caso precise para validações ou customizações
+from datetime import datetime
+from marshmallow import fields # Adicione esta linha para importar 'fields'
 
 ma = Marshmallow()
 
@@ -18,7 +18,11 @@ class PessoaSchema(ma.SQLAlchemyAutoSchema):
         sqla_session = None
 
 class VacinacaoSchema(ma.SQLAlchemyAutoSchema):
-    data_aplicacao = ma.fields.DateTime(format='%Y-%m-%dT%H:%M:%S') # Formato ISO 8601
+    # A linha abaixo precisa ser alterada
+    # data_aplicacao = ma.fields.DateTime(format='%Y-%m-%dT%H:%M:%S')
+
+    # Para esta:
+    data_aplicacao = fields.DateTime(format='%Y-%m-%dT%H:%M:%S')
 
     class Meta:
         model = Vacinacao
