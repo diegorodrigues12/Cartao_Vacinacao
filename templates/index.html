@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartão de Vacinação</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Gerenciamento de Cartão de Vacinação</h1>
+
+        <!-- Seção de Seleção/Cadastro de Pessoa -->
+        <div class="info-section">
+            <h2>Informações do Usuário</h2>
+            <label for="pessoaSelect">Selecionar Pessoa:</label>
+            <select id="pessoaSelect" onchange="loadPessoaCartao()">
+                <option value="">-- Selecione uma pessoa --</option>
+            </select>
+            <button onclick="openAddPessoaModal()">Cadastrar Nova Pessoa</button>
+
+            <div id="currentPessoaInfo" style="margin-top: 15px;">
+                <p>Nome: <span id="currentPessoaNome"></span></p>
+                <p>ID: <span id="currentPessoaId"></span></p>
+                <p>Identificação: <span id="currentPessoaIdentificacao"></span></p>
+            </div>
+        </div>
+
+        <!-- Seção de Vacinas Registradas (Cartão de Vacinação) -->
+        <div id="cartaoVacinacaoSection" style="display: none;">
+            <h2>Carteira Nacional de Vacinação</h2>
+
+            <div class="buttons-group" style="margin-bottom: 20px;">
+                <!-- O botão "Cadastrar Nova Vacina" foi removido daqui -->
+                <button onclick="openAddVacinacaoModal()">Registrar Vacinação</button>
+            </div>
+
+            <table id="vacinasTable">
+                <thead>
+                    <tr>
+                        <th>Vacina / Doses</th>
+                        <!-- As colunas de vacinas serão geradas via JS -->
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- As linhas de doses e dados serão geradas via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modais (Pop-ups) -->
+
+    <!-- Modal para Adicionar Pessoa -->
+    <div id="addPessoaModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('addPessoaModal')">&times;</span>
+            <h3>Cadastrar Nova Pessoa</h3>
+            <label for="newPessoaNome">Nome:</label>
+            <input type="text" id="newPessoaNome" placeholder="Nome Completo">
+            <label for="newPessoaIdentificacao">Número de Identificação:</label>
+            <input type="text" id="newPessoaIdentificacao" placeholder="Ex: CPF, RG, etc.">
+            <button onclick="addPessoa()">Salvar Pessoa</button>
+            <p id="addPessoaMessage" style="color: red;"></p>
+        </div>
+    </div>
+
+    <!-- O Modal para Adicionar Vacina foi removido daqui -->
+
+    <!-- Modal para Registrar Vacinação -->
+    <div id="addVacinacaoModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('addVacinacaoModal')">&times;</span>
+            <h3>Registrar Vacinação</h3>
+            <p>Pessoa: <span id="vacinacaoPessoaNome"></span></p>
+            <label for="vacinacaoVacinaSelect">Vacina:</label>
+            <select id="vacinacaoVacinaSelect">
+                <!-- Opções carregadas via JS -->
+            </select>
+            <label for="vacinacaoDose">Dose Aplicada:</label>
+            <select id="vacinacaoDose">
+                <option value="1a Dose">1ª Dose</option>
+                <option value="2a Dose">2ª Dose</option>
+                <option value="3a Dose">3ª Dose</option>
+                <option value="Reforco">Reforço</option> <!-- Padronizado: Reforco -->
+                <option value="1a Reforco">1º Reforço</option> <!-- Adicionado e Padronizado -->
+                <option value="2a Reforco">2º Reforço</option> <!-- Adicionado e Padronizado -->
+                <option value="Dose Unica">Dose Única</option> <!-- Padronizado: Dose Unica -->
+                <option value="BCG">BCG (para a vacina BCG)</option>
+                <option value="Faltoso">Faltoso</option>
+                <option value="4a Dose">4ª Dose</option>
+                <option value="5a Dose">5ª Dose</option>
+            </select>
+            <label for="vacinacaoData">Data de Aplicação:</label>
+            <input type="date" id="vacinacaoData">
+            <button onclick="addVacinacao()">Registrar</button>
+            <p id="addVacinacaoMessage" style="color: red;"></p>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação para Exclusão -->
+    <div id="confirmDeleteModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirmar Exclusão</h3>
+            <p id="confirmDeleteMessage"></p>
+            <button onclick="executeDelete()">Confirmar</button>
+            <button onclick="closeModal('confirmDeleteModal')">Cancelar</button>
+        </div>
+    </div>
+
+    <script src="static/script.js"></script>
+</body>
+</html>

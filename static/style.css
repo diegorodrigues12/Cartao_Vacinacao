@@ -1,0 +1,128 @@
+/* cartao_vacinacao_api/static/style.css */
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1, h2 {
+    color: #0056b3;
+}
+
+input[type="text"], input[type="date"], select, button {
+    padding: 8px;
+    margin: 5px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+button {
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    border: none;
+    padding: 10px 15px;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background-color: #f2f2f2;
+}
+
+.info-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #e9f7ef;
+    border-left: 5px solid #28a745;
+    border-radius: 4px;
+}
+
+.vacina-cell {
+    text-align: center;
+    vertical-align: middle;
+    font-weight: bold;
+}
+
+.dose-cell {
+    background-color: #f9f9f9;
+    font-size: 0.9em;
+}
+
+.faltoso {
+    background-color: #ffe0e0;
+    color: #d8000c;
+    font-weight: bold;
+}
+
+.aplicada {
+    background-color: #e0ffe0;
+    color: #28a745;
+}
+
+.buttons-group button {
+    margin-right: 10px;
+}
+
+/* Estilos para modais (já estavam no index.html, mas idealmente ficam aqui) */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%; /* Could be more or less, depending on screen size */
+    max-width: 500px;
+    border-radius: 8px;
+    position: relative;
+}
+
+.close-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}

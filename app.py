@@ -1,10 +1,10 @@
 # cartao_vacinacao_api/app.py
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template # render_template deve estar aqui!
 from config import Config
-from models import db, Vacina, Pessoa, Vacinacao # Importar todos os modelos
-from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema # Importar todos os schemas
+from models import db, Vacina, Pessoa, Vacinacao
+from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema
 from datetime import datetime
-import os # Importar para possível uso de variáveis de ambiente
+import os
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -26,12 +26,30 @@ pessoas_schema = PessoaSchema(many=True)
 vacinacao_schema = VacinacaoSchema()
 vacinacoes_schema = VacinacaoSchema(many=True)
 
-
-# Cria as tabelas no banco de dados se elas não existirem
+# Cria as tabelas no banco de dados se elas não existirem e popula vacinas iniciais
 with app.app_context():
     db.create_all()
 
+    initial_vacinas = [
+        "BCG", "HEPATITE B", "ANTI-POLIO (SABIN)", "TETRA VALENTE",
+        "TRIPLICE BACTERIANA (DPT)", "HAEMOPHILUS INFLUENZAE",
+        "TRIPLICE ACELULAR", "PNEUMO 10 VALENTE", "MENINGO C", "ROTAVIRUS"
+    ]
+
+    for vacina_nome in initial_vacinas:
+        if not Vacina.query.filter_by(nome=vacina_nome).first():
+            new_vacina = Vacina(nome=vacina_nome)
+            db.session.add(new_vacina)
+            print(f"Vacina '{vacina_nome}' adicionada ao banco de dados.") # Apenas para ver no terminal
+    db.session.commit()
+    print("Vacinas iniciais populadas ou já existentes.")
+
 # --- Rotas da API ---
+
+# Rota para servir a página HTML principal
+@app.route('/')
+def serve_index():
+    return render_template('index.html')
 
 # 1. Rotas para Vacinas
 @app.route('/vacinas', methods=['POST'])
@@ -79,16 +97,6 @@ def delete_vacina(id):
         db.session.rollback()
         return jsonify({"message": f"Erro ao remover vacina: {str(e)}"}), 500
 
-
-# Rota principal para teste inicial
-@app.route('/')
-def index():
-    return jsonify({"message": "Bem-vindo à API de Cartão de Vacinação!"})
-
-if __name__ == '__main__':
-    app.run(debug=True)
-
-# ... (código anterior)
 
 # 2. Rotas para Pessoas
 @app.route('/pessoas', methods=['POST'])
@@ -139,8 +147,6 @@ def delete_pessoa(id):
         db.session.rollback()
         return jsonify({"message": f"Erro ao remover pessoa: {str(e)}"}), 500
 
-# ... (restante do código)
-# ... (código anterior)
 
 # 3. Rotas para Vacinações
 @app.route('/vacinacoes', methods=['POST'])
@@ -165,7 +171,7 @@ def add_vacinacao():
             return jsonify({"message": "Vacina não encontrada."}), 404
 
         # Validação da dose (exemplo básico, pode ser mais complexo)
-        doses_validas = ["1a Dose", "2a Dose", "3a Dose", "Reforço", "Dose Única", "BCG", "Faltoso", "4a Dose", "5a Dose"] # Adicionado mais algumas doses comuns
+        doses_validas = ["1a Dose", "2a Dose", "3a Dose", "Reforco", "Dose Unica", "BCG", "Faltoso", "4a Dose", "5a Dose", "1a Reforco", "2a Reforco"] # Adicionado as doses de reforço aqui também para consistência
         if dose_aplicada not in doses_validas:
              return jsonify({"message": f"Dose '{dose_aplicada}' inválida. Doses válidas: {', '.join(doses_validas)}"}), 400
 
@@ -207,7 +213,12 @@ def get_cartao_vacinacao(pessoa_id):
     if not pessoa:
         return jsonify({"message": "Pessoa não encontrada."}), 404
 
-    vacinacoes = Vacinacao.query.filter_by(pessoa_id=pessoa_id).order_by(Vacinacao.data_aplicacao.asc()).all()
+    # Usa `join` para buscar os nomes das vacinas diretamente
+    vacinacoes = db.session.query(Vacinacao, Vacina.nome)\
+                           .join(Vacina)\
+                           .filter(Vacinacao.pessoa_id == pessoa_id)\
+                           .order_by(Vacinacao.data_aplicacao.asc())\
+                           .all()
 
     cartao_vacinacao_data = {
         "pessoa": pessoa_schema.dump(pessoa),
@@ -215,22 +226,29 @@ def get_cartao_vacinacao(pessoa_id):
     }
 
     vacinas_agrupadas = {}
-    for vacinacao in vacinacoes:
-        vacina_nome = vacinacao.vacina.nome
+    for vacinacao_obj, vacina_nome in vacinacoes:
         if vacina_nome not in vacinas_agrupadas:
             vacinas_agrupadas[vacina_nome] = {
-                "id_vacina": vacinacao.vacina_id, # Adicionado o ID da vacina para facilitar
+                "id_vacina": vacina_id, # Usar vacinacao_obj.vacina_id aqui
                 "nome_vacina": vacina_nome,
                 "doses": []
             }
         vacinas_agrupadas[vacina_nome]["doses"].append({
-            "id_vacinacao": vacinacao.id,
-            "data_aplicacao": vacinacao.data_aplicacao.isoformat(),
-            "dose_aplicada": vacinacao.dose_aplicada
+            "id_vacinacao": vacinacao_obj.id,
+            "data_aplicacao": vacinacao_obj.data_aplicacao.isoformat(),
+            "dose_aplicada": vacinacao_obj.dose_aplicada
         })
 
+    # Convertendo o dicionário para uma lista para a resposta JSON
     for vacina_nome, data in vacinas_agrupadas.items():
+        # Corrigindo o id_vacina aqui, para pegar do objeto vacinacao_obj
+        # Note que se a vacina não tem nenhum registro, ela não aparecerá aqui.
+        # Mas para o propósito do cartão, apenas vacinas com doses registradas importam.
+        first_vacinacao_for_vacina = next((v for v, _ in vacinacoes if v.vacina.nome == vacina_nome), None)
+        if first_vacinacao_for_vacina:
+             data["id_vacina"] = first_vacinacao_for_vacina.vacina_id
         cartao_vacinacao_data["vacinas_registradas"].append(data)
+
 
     return jsonify(cartao_vacinacao_data), 200
 
@@ -249,4 +267,5 @@ def delete_vacinacao(id):
         db.session.rollback()
         return jsonify({"message": f"Erro ao remover registro de vacinação: {str(e)}"}), 500
 
-# ... (restante do código)
+if __name__ == '__main__':
+    app.run(debug=True)
