@@ -87,3 +87,56 @@ def index():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+# ... (código anterior)
+
+# 2. Rotas para Pessoas
+@app.route('/pessoas', methods=['POST'])
+def add_pessoa():
+    try:
+        data = request.get_json()
+        if not data or 'nome' not in data or 'numero_identificacao' not in data:
+            return jsonify({"message": "Dados inválidos: 'nome' e 'numero_identificacao' são obrigatórios."}), 400
+
+        nome = data['nome']
+        numero_identificacao = data['numero_identificacao']
+
+        if Pessoa.query.filter_by(numero_identificacao=numero_identificacao).first():
+            return jsonify({"message": f"Pessoa com número de identificação '{numero_identificacao}' já existe."}), 409
+
+        new_pessoa = Pessoa(nome=nome, numero_identificacao=numero_identificacao)
+        db.session.add(new_pessoa)
+        db.session.commit()
+        return pessoa_schema.jsonify(new_pessoa), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"Erro ao cadastrar pessoa: {str(e)}"}), 500
+
+@app.route('/pessoas', methods=['GET'])
+def get_pessoas():
+    all_pessoas = Pessoa.query.all()
+    return pessoas_schema.jsonify(all_pessoas), 200
+
+@app.route('/pessoas/<int:id>', methods=['GET'])
+def get_pessoa(id):
+    pessoa = Pessoa.query.get(id)
+    if not pessoa:
+        return jsonify({"message": "Pessoa não encontrada."}), 404
+    return pessoa_schema.jsonify(pessoa), 200
+
+@app.route('/pessoas/<int:id>', methods=['DELETE'])
+def delete_pessoa(id):
+    pessoa = Pessoa.query.get(id)
+    if not pessoa:
+        return jsonify({"message": "Pessoa não encontrada."}), 404
+
+    try:
+        # Devido ao cascade="all, delete-orphan" em Pessoa, as vacinações associadas serão excluídas.
+        db.session.delete(pessoa)
+        db.session.commit()
+        return jsonify({"message": "Pessoa e seu cartão de vacinação removidos com sucesso."}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"Erro ao remover pessoa: {str(e)}"}), 500
+
+# ... (restante do código)
