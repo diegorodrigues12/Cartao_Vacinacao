@@ -24,7 +24,8 @@ def client():
         yield client # Retorna o cliente de teste para os testes
         
         # POP do contexto de aplicação AQUI, após os testes
-        db.session.remove() # Limpa a sessão do DB, é importante antes de drop_all()
+        # Garante que a sessão seja removida antes do pop do contexto
+        db.session.remove() 
         db.drop_all() # Limpa o DB após os testes
         app_ctx.pop() 
 
@@ -52,7 +53,6 @@ def test_add_pessoa(client):
     assert response_json["numero_identificacao"] == "11122233344"
     
     # As operações de DB dentro dos testes agora dependem do contexto ativado pelo fixture
-    # REMOVIDO: with app.app_context():
     pessoa = db.session.get(Pessoa, response_json["id"])
     assert pessoa is not None
     assert pessoa.nome == "João Silva"
@@ -89,7 +89,6 @@ def test_delete_pessoa(client):
     pessoa_id = add_response.get_json()["id"]
 
     # Adiciona uma vacinação para essa pessoa (para testar o cascade delete)
-    # REMOVIDO: with app.app_context():
     # E vamos garantir que a vacina exista no DB de teste
     vacina_bcg = db.session.query(Vacina).filter_by(nome="BCG").first()
     if not vacina_bcg:
@@ -115,7 +114,6 @@ def test_delete_pessoa(client):
     assert get_response.status_code == 404
 
     # Verifica se as vacinações da pessoa também foram removidas
-    # REMOVIDO: with app.app_context():
     vacinacoes_restantes = Vacinacao.query.filter_by(pessoa_id=pessoa_id).all()
     assert len(vacinacoes_restantes) == 0
 
@@ -126,7 +124,6 @@ def test_add_vacinacao(client):
     add_pessoa_response = client.post('/pessoas', json={"nome": "Carlos Teste", "numero_identificacao": "10120230340"})
     pessoa_id = add_pessoa_response.get_json()["id"]
     
-    # REMOVIDO: with app.app_context():
     vacina_hepatite_b = db.session.query(Vacina).filter_by(nome="HEPATITE B").first()
     if not vacina_hepatite_b:
         vacina_hepatite_b = Vacina(nome="HEPATITE B", categoria="Nacional")
@@ -155,7 +152,6 @@ def test_add_vacinacao_2a_dose_sem_1a(client):
     add_pessoa_response = client.post('/pessoas', json={"nome": "Daniela Valida", "numero_identificacao": "12345678910"})
     pessoa_id = add_pessoa_response.get_json()["id"]
     
-    # REMOVIDO: with app.app_context():
     vacina_tetra = db.session.query(Vacina).filter_by(nome="TETRA VALENTE").first()
     if not vacina_tetra:
         vacina_tetra = Vacina(nome="TETRA VALENTE", categoria="Nacional")
@@ -181,7 +177,6 @@ def test_get_cartao_vacinacao(client):
     add_pessoa_response = client.post('/pessoas', json={"nome": "Fernanda Teste", "numero_identificacao": "66677788899"})
     pessoa_id = add_pessoa_response.get_json()["id"]
 
-    # REMOVIDO: with app.app_context():
     vacina_bcg = db.session.query(Vacina).filter_by(nome="BCG").first()
     vacina_hepatite_b = db.session.query(Vacina).filter_by(nome="HEPATITE B").first()
     # Adicionar vacinas se não existirem (garantir para testes futuros)
