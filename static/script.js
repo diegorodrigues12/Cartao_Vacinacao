@@ -209,12 +209,13 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
             tdDoseType.textContent = doseType === "Dose Unica" ? "Dose Única" : doseType;
         }
 
-        tdDoseType.style.fontWeight = 'bold';
+        tdDoseType.style.fontWeight = 'bold'; // Manter negrito geral para a célula
         tdDoseType.style.backgroundColor = '#eef';
+        // Ajusta o alinhamento e flexbox para que o conteúdo (Tipo e Dose) fique centralizado
         tdDoseType.style.display = 'flex';
         tdDoseType.style.flexDirection = 'column';
         tdDoseType.style.justifyContent = 'center';
-        tdDoseType.style.alignItems = 'center';
+        tdDoseType.style.alignItems = 'center'; // Centraliza horizontalmente o conteúdo da célula
 
 
         row.appendChild(tdDoseType);
@@ -246,7 +247,6 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
                     deleteButton.style.color = 'white';
                     deleteButton.style.borderRadius = '3px';
                     
-                    // console.log para depurar o ID da dose
                     console.log(`Botão de exclusão criado para Vacina: ${vacinaName}, Dose: ${doseType}, ID da Vacinação: ${dose.id_vacinacao}`);
 
                     deleteButton.onclick = (event) => {
@@ -448,10 +448,7 @@ function exportCartaoVacinacaoToCsv() {
 
     // Cabeçalho CSV
     console.log("currentCategory:", currentCategory); // Log da categoria atual
-    const vacinasExibirNestaCategoriaCsv = allVacinas.filter(vac => {
-        console.log(`Vacina: ${vac.nome}, Categoria: ${vac.categoria}, Current Category: ${currentCategory}`); // Log de filtragem
-        return vac.categoria === currentCategory;
-    });
+    const vacinasExibirNestaCategoriaCsv = allVacinas.filter(vac => vac.categoria === currentCategory);
     const vacinaNamesInOrderCsv = vacinasExibirNestaCategoriaCsv.map(vac => vac.nome);
 
     console.log("vacinaNamesInOrderCsv (colunas do CSV):", vacinaNamesInOrderCsv); // Log das colunas
@@ -481,7 +478,6 @@ function exportCartaoVacinacaoToCsv() {
             
         let rowData = `"${displayDoseTypeCsv}"`;
         vacinaNamesInOrderCsv.forEach(vacinaName => {
-            // Garante que estamos procurando a vacina DATA dentro do CONJUNTO COMPLETO de vacinas registradas
             const vacinaData = vacinasRegistradas.find(v => v.nome_vacina === vacinaName);
             let cellContent = "";
             if (vacinaData && vacinaData.doses) {
@@ -517,7 +513,6 @@ function exportCartaoVacinacaoToCsv() {
         link.setAttribute('download', `cartao_vacinacao_${pessoa.nome.replace(/\s/g, '_')}_${pessoa.id}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
-        link.click();
         document.body.removeChild(link);
         console.log("Download do CSV disparado."); // Log de sucesso
     } else {
