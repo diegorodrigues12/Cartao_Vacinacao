@@ -5,27 +5,23 @@ from models import db, Vacina, Pessoa, Vacinacao
 from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema
 from datetime import datetime
 import os
-import logging # Importar o módulo logging
+import logging
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Configurar logging básico (opcional, mas recomendado para depuração em produção)
 if not app.debug:
     file_handler = logging.FileHandler('error.log')
     file_handler.setLevel(logging.WARNING)
     app.logger.addHandler(file_handler)
 
-# Inicializa as extensões
 db.init_app(app)
 ma.init_app(app)
 
-# Definir a sessão do SQLAlchemy para os schemas
 VacinaSchema.Meta.sqla_session = db.session
 PessoaSchema.Meta.sqla_session = db.session
 VacinacaoSchema.Meta.sqla_session = db.session
 
-# Instancia os schemas
 vacina_schema = VacinaSchema()
 vacinas_schema = VacinaSchema(many=True)
 pessoa_schema = PessoaSchema()
@@ -37,31 +33,50 @@ vacinacoes_schema = VacinacaoSchema(many=True)
 with app.app_context():
     db.create_all()
 
-    initial_vacinas = [
-        "BCG", "HEPATITE B", "ANTI-POLIO (SABIN)", "TETRA VALENTE",
-        "TRIPLICE BACTERIANA (DPT)", "HAEMOPHILUS INFLUENZAE",
-        "TRIPLICE ACELULAR", "PNEUMO 10 VALENTE", "MENINGO C", "ROTAVIRUS"
+    # Vacinas iniciais com categorias (ATUALIZADO)
+    initial_vacinas_data = [
+        {"nome": "BCG", "categoria": "Nacional"},
+        {"nome": "HEPATITE B", "categoria": "Nacional"},
+        {"nome": "ANTI-POLIO (SABIN)", "categoria": "Nacional"},
+        {"nome": "TETRA VALENTE", "categoria": "Nacional"},
+        {"nome": "TRIPLICE BACTERIANA (DPT)", "categoria": "Nacional"},
+        {"nome": "HAEMOPHILUS INFLUENZAE", "categoria": "Nacional"},
+        {"nome": "TRIPLICE ACELULAR", "categoria": "Nacional"},
+        {"nome": "PNEUMO 10 VALENTE", "categoria": "Nacional"},
+        {"nome": "MENINGO C", "categoria": "Nacional"},
+        {"nome": "ROTAVIRUS", "categoria": "Nacional"},
+        {"nome": "Anti Rábica Humana", "categoria": "Anti Rábica"},
+        {"nome": "BCG Contato", "categoria": "BCG de Contato"},
+        {"nome": "Gripe (Particular)", "categoria": "Vacinas Particulares"},
+        {"nome": "Febre Amarela (Outra)", "categoria": "Outra Vacina"},
     ]
 
-    for vacina_nome in initial_vacinas:
-        if not Vacina.query.filter_by(nome=vacina_nome).first():
-            new_vacina = Vacina(nome=vacina_nome)
+    for vacina_info in initial_vacinas_data:
+        vacina_nome = vacina_info["nome"]
+        vacina_categoria = vacina_info["categoria"]
+        
+        existing_vacina = Vacina.query.filter_by(nome=vacina_nome).first()
+        if existing_vacina:
+            if existing_vacina.categoria != vacina_categoria:
+                existing_vacina.categoria = vacina_categoria
+                db.session.add(existing_vacina)
+                print(f"Vacina '{vacina_nome}' categoria atualizada para '{vacina_categoria}'.")
+        else:
+            new_vacina = Vacina(nome=vacina_nome, categoria=vacina_categoria)
             db.session.add(new_vacina)
-            print(f"Vacina '{vacina_nome}' adicionada ao banco de dados.")
+            print(f"Vacina '{vacina_nome}' adicionada ao banco de dados com categoria '{vacina_categoria}'.")
     db.session.commit()
-    print("Vacinas iniciais populadas ou já existentes.")
+    print("Vacinas iniciais populadas ou atualizadas.")
 
-# --- Manipulador de Erro Global (NOVO) ---
-# Garante que erros 500 (erros internos do servidor) sempre retornem JSON
+
+# --- Manipulador de Erro Global ---
 @app.errorhandler(500)
 def internal_server_error(e):
-    # Registrar a exceção completa para depuração no servidor
     app.logger.exception("Ocorreu uma exceção não tratada durante uma requisição.")
     return jsonify({"message": "Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde."}), 500
 
 # --- Rotas da API ---
 
-# Rota para servir a página HTML principal
 @app.route('/')
 def serve_index():
     return render_template('index.html')
@@ -75,10 +90,12 @@ def add_vacina():
             return jsonify({"message": "Dados inválidos: 'nome' da vacina é obrigatório."}), 400
 
         nome = data['nome']
+        categoria = data.get('categoria', 'Geral') # Permite categoria opcional no POST
+        
         if Vacina.query.filter_by(nome=nome).first():
             return jsonify({"message": f"Vacina '{nome}' já existe."}), 409
 
-        new_vacina = Vacina(nome=nome)
+        new_vacina = Vacina(nome=nome, categoria=categoria)
         db.session.add(new_vacina)
         db.session.commit()
         return vacina_schema.jsonify(new_vacina), 201
@@ -89,7 +106,12 @@ def add_vacina():
 
 @app.route('/vacinas', methods=['GET'])
 def get_vacinas():
-    all_vacinas = Vacina.query.all()
+    # NOVO: Permite filtrar por categoria
+    categoria = request.args.get('categoria')
+    if categoria:
+        all_vacinas = Vacina.query.filter_by(categoria=categoria).all()
+    else:
+        all_vacinas = Vacina.query.all()
     return vacinas_schema.jsonify(all_vacinas), 200
 
 @app.route('/vacinas/<int:id>', methods=['GET'])
@@ -157,7 +179,6 @@ def delete_pessoa(id):
         return jsonify({"message": "Pessoa não encontrada."}), 404
 
     try:
-        # Devido ao cascade="all, delete-orphan" em Pessoa, as vacinações associadas serão excluídas.
         db.session.delete(pessoa)
         db.session.commit()
         return jsonify({"message": "Pessoa e seu cartão de vacinação removidos com sucesso."}), 200
@@ -234,7 +255,7 @@ def get_cartao_vacinacao(pessoa_id):
         return jsonify({"message": "Pessoa não encontrada."}), 404
 
     # Usa `join` para buscar os nomes das vacinas e seus IDs diretamente do banco
-    vacinacoes = db.session.query(Vacinacao, Vacina.nome, Vacina.id.label('vacina_db_id'))\
+    vacinacoes = db.session.query(Vacinacao, Vacina.nome, Vacina.id.label('vacina_db_id'), Vacina.categoria)\
                            .join(Vacina)\
                            .filter(Vacinacao.pessoa_id == pessoa_id)\
                            .order_by(Vacinacao.data_aplicacao.asc())\
@@ -246,11 +267,12 @@ def get_cartao_vacinacao(pessoa_id):
     }
 
     vacinas_agrupadas = {}
-    for vacinacao_obj, vacina_nome, vacina_db_id in vacinacoes:
+    for vacinacao_obj, vacina_nome, vacina_db_id, vacina_categoria in vacinacoes: # NOVO: Captura categoria
         if vacina_nome not in vacinas_agrupadas:
             vacinas_agrupadas[vacina_nome] = {
                 "id_vacina": vacina_db_id,
                 "nome_vacina": vacina_nome,
+                "categoria_vacina": vacina_categoria, # NOVO: Adiciona categoria aqui
                 "doses": []
             }
         vacinas_agrupadas[vacina_nome]["doses"].append({
@@ -279,9 +301,7 @@ def delete_vacinacao(id):
         return jsonify({"message": "Registro de vacinação removido com sucesso."}), 200
     except Exception as e:
         db.session.rollback()
-        # Registrar o erro detalhado no log do servidor
         app.logger.error(f"Erro no backend ao remover vacinação com ID {id}: {str(e)}")
-        # Retornar uma mensagem de erro genérica para o frontend
         return jsonify({"message": "Falha ao remover o registro de vacinação. Tente novamente."}), 500
 
 if __name__ == '__main__':

@@ -3,12 +3,18 @@
 const API_BASE_URL = 'http://127.0.0.1:5000'; // Endereço da sua API Flask
 
 let currentPessoaId = null;
-let allVacinas = []; // Para armazenar todas as vacinas disponíveis
+let allVacinas = []; // Para armazenar TODAS as vacinas disponíveis (sem filtro de categoria)
 let deleteTarget = { type: null, id: null }; // Para o modal de confirmação de exclusão
 let currentCartaoData = null; // Para armazenar os dados do cartão de vacinação atual
+let currentCategory = 'Nacional'; // Categoria ativa padrão (primeira aba)
 
 document.addEventListener('DOMContentLoaded', () => {
     loadPessoas(); // Carrega as pessoas ao carregar a página
+    // No carregamento inicial, ative a aba "Nacional" visualmente
+    const defaultTab = document.querySelector('.tab-item[data-category="Nacional"]');
+    if (defaultTab) {
+        defaultTab.classList.add('active');
+    }
 });
 
 // --- Funções de Ajuda ---
@@ -99,6 +105,10 @@ async function loadPessoaCartao() {
         cartaoSection.style.display = 'block';
         deletePessoaButton.style.display = 'inline-block'; // Mostra o botão quando a pessoa está selecionada
 
+        // Carrega TODAS as vacinas (sem filtro) para 'allVacinas' que será usado para filtragem local
+        await loadVacinasForSelect(); 
+
+        // Renderiza a tabela com a categoria atual (padrão 'Nacional' ou a selecionada)
         renderCartaoVacinacaoTable(vacinasRegistradas);
 
     } catch (error) {
@@ -112,9 +122,17 @@ async function loadPessoaCartao() {
 
 async function loadVacinasForSelect() {
     try {
-        allVacinas = await fetchData(`${API_BASE_URL}/vacinas`); // Armazena todas as vacinas
+        // allVacinas pega TODAS as vacinas sem filtro de categoria
+        allVacinas = await fetchData(`${API_BASE_URL}/vacinas`); 
         const vacinaSelect = document.getElementById('vacinacaoVacinaSelect');
         vacinaSelect.innerHTML = ''; // Limpa as opções existentes
+
+        // Adiciona um valor padrão ao select
+        const defaultOption = document.createElement('option');
+        defaultOption.value = "";
+        defaultOption.textContent = "-- Selecione uma vacina --";
+        vacinaSelect.appendChild(defaultOption);
+
         allVacinas.forEach(vacina => {
             const option = document.createElement('option');
             option.value = vacina.id;
@@ -142,12 +160,11 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
     thDose.textContent = 'Vacinas / Doses';
     headerRow.appendChild(thDose);
 
-    // Array de nomes de vacinas únicos e ordenados (da imagem original)
-    const vacinaNamesInOrder = [
-        "BCG", "HEPATITE B", "ANTI-POLIO (SABIN)", "TETRA VALENTE",
-        "TRIPLICE BACTERIANA (DPT)", "HAEMOPHILUS INFLUENZAE",
-        "TRIPLICE ACELULAR", "PNEUMO 10 VALENTE", "MENINGO C", "ROTAVIRUS"
-    ];
+    // Filtra as vacinas a serem exibidas na tabela pela categoria atual
+    const vacinasExibirNestaCategoria = allVacinas.filter(vac => vac.categoria === currentCategory);
+    
+    // Array de nomes de vacinas únicos e ordenados (das vacinas filtradas)
+    const vacinaNamesInOrder = vacinasExibirNestaCategoria.map(vac => vac.nome);
 
     // Mapeia vacinas registradas por nome para facilitar o acesso
     const vacinasRegistradasMap = {};
@@ -174,19 +191,32 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
     dosesTypes.forEach(doseType => {
         let row = document.createElement('tr');
         let tdDoseType = document.createElement('td');
-        // Formata o texto da dose para exibição
-        let displayDoseType = doseType;
-        if (doseType === "1a Dose") displayDoseType = "Tipo 1ª Dose";
-        else if (doseType === "2a Dose") displayDoseType = "Tipo 2ª Dose";
-        else if (doseType === "3a Dose") displayDoseType = "Tipo 3ª Dose";
-        else if (doseType === "1a Reforco") displayDoseType = "Tipo 1º Reforço";
-        else if (doseType === "2a Reforco") displayDoseType = "Tipo 2º Reforço";
-        else if (doseType === "Dose Unica") displayDoseType = "Dose Única";
         
-        tdDoseType.textContent = displayDoseType;
+        let tipoText = '';
+        let doseText = '';
+
+        if (doseType === "1a Dose" || doseType === "2a Dose" || doseType === "3a Dose" ||
+            doseType === "1a Reforco" || doseType === "2a Reforco") {
+            tipoText = 'Tipo';
+            if (doseType === "1a Dose") doseText = '1ª Dose';
+            else if (doseType === "2a Dose") doseText = '2ª Dose';
+            else if (doseType === "3a Dose") doseText = '3ª Dose';
+            else if (doseType === "1a Reforco") doseText = '1º Reforço';
+            else if (doseType === "2a Reforco") doseText = '2º Reforço';
+            
+            tdDoseType.innerHTML = `<span class="dose-tipo-text">${tipoText}</span><br><span class="dose-num-text">${doseText}</span>`;
+        } else {
+            tdDoseType.textContent = doseType === "Dose Unica" ? "Dose Única" : doseType;
+        }
+
         tdDoseType.style.fontWeight = 'bold';
-        tdDoseType.style.color = '#007bff';
         tdDoseType.style.backgroundColor = '#eef';
+        tdDoseType.style.display = 'flex';
+        tdDoseType.style.flexDirection = 'column';
+        tdDoseType.style.justifyContent = 'center';
+        tdDoseType.style.alignItems = 'center';
+
+
         row.appendChild(tdDoseType);
 
         vacinaNamesInOrder.forEach(vacinaName => {
@@ -216,6 +246,7 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
                     deleteButton.style.color = 'white';
                     deleteButton.style.borderRadius = '3px';
                     
+                    // console.log para depurar o ID da dose
                     console.log(`Botão de exclusão criado para Vacina: ${vacinaName}, Dose: ${doseType}, ID da Vacinação: ${dose.id_vacinacao}`);
 
                     deleteButton.onclick = (event) => {
@@ -403,8 +434,10 @@ async function openAddVacinacaoModal() {
 
 // Função para exportar dados do cartão de vacinação para CSV
 function exportCartaoVacinacaoToCsv() {
+    console.log("Iniciando exportCartaoVacinacaoToCsv..."); // Log de início
     if (!currentCartaoData || !currentPessoaId) {
         alert('Selecione uma pessoa e carregue o cartão de vacinação primeiro para exportar.');
+        console.error("Dados do cartão ou ID da pessoa ausentes para exportação."); // Log de erro
         return;
     }
 
@@ -414,15 +447,17 @@ function exportCartaoVacinacaoToCsv() {
     let csvContent = "";
 
     // Cabeçalho CSV
-    const vacinaNamesInOrder = [
-        "BCG", "HEPATITE B", "ANTI-POLIO (SABIN)", "TETRA VALENTE",
-        "TRIPLICE BACTERIANA (DPT)", "HAEMOPHILUS INFLUENZAE",
-        "TRIPLICE ACELULAR", "PNEUMO 10 VALENTE", "MENINGO C", "ROTAVIRUS"
-    ];
-    
-    // Cabeçalho para as doses na primeira coluna
+    console.log("currentCategory:", currentCategory); // Log da categoria atual
+    const vacinasExibirNestaCategoriaCsv = allVacinas.filter(vac => {
+        console.log(`Vacina: ${vac.nome}, Categoria: ${vac.categoria}, Current Category: ${currentCategory}`); // Log de filtragem
+        return vac.categoria === currentCategory;
+    });
+    const vacinaNamesInOrderCsv = vacinasExibirNestaCategoriaCsv.map(vac => vac.nome);
+
+    console.log("vacinaNamesInOrderCsv (colunas do CSV):", vacinaNamesInOrderCsv); // Log das colunas
+
     let headerRow = "Dose/Vacina";
-    vacinaNamesInOrder.forEach(vacinaName => {
+    vacinaNamesInOrderCsv.forEach(vacinaName => {
         headerRow += `;${vacinaName}`;
     });
     csvContent += headerRow + "\n";
@@ -435,17 +470,18 @@ function exportCartaoVacinacaoToCsv() {
     ];
 
     dosesTypes.forEach(doseType => {
-        // Formato para CSV igual ao display da tabela
-        let displayDoseTypeCsv = doseType;
+        let displayDoseTypeCsv = '';
         if (doseType === "1a Dose") displayDoseTypeCsv = "Tipo 1ª Dose";
         else if (doseType === "2a Dose") displayDoseTypeCsv = "Tipo 2ª Dose";
         else if (doseType === "3a Dose") displayDoseTypeCsv = "Tipo 3ª Dose";
         else if (doseType === "1a Reforco") displayDoseTypeCsv = "Tipo 1º Reforço";
         else if (doseType === "2a Reforco") displayDoseTypeCsv = "Tipo 2º Reforço";
         else if (doseType === "Dose Unica") displayDoseTypeCsv = "Dose Única";
+        else displayDoseTypeCsv = doseType; 
             
         let rowData = `"${displayDoseTypeCsv}"`;
-        vacinaNamesInOrder.forEach(vacinaName => {
+        vacinaNamesInOrderCsv.forEach(vacinaName => {
+            // Garante que estamos procurando a vacina DATA dentro do CONJUNTO COMPLETO de vacinas registradas
             const vacinaData = vacinasRegistradas.find(v => v.nome_vacina === vacinaName);
             let cellContent = "";
             if (vacinaData && vacinaData.doses) {
@@ -470,6 +506,7 @@ function exportCartaoVacinacaoToCsv() {
     csvContent += `ID:;${pessoa.id}\n`;
     csvContent += `Identificação:;${pessoa.numero_identificacao}\n`;
 
+    console.log("Conteúdo CSV gerado:\n", csvContent); // Log do conteúdo final
 
     // Cria um Blob e dispara o download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -480,8 +517,36 @@ function exportCartaoVacinacaoToCsv() {
         link.setAttribute('download', `cartao_vacinacao_${pessoa.nome.replace(/\s/g, '_')}_${pessoa.id}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
+        link.click();
         document.body.removeChild(link);
+        console.log("Download do CSV disparado."); // Log de sucesso
     } else {
         alert('Seu navegador não suporta download direto de arquivos. Por favor, copie o conteúdo.');
+        console.error("Navegador não suporta download direto."); // Log de erro
+    }
+}
+
+// Função para lidar com a seleção de categorias nas abas
+function selectCategory(category, clickedTabElement) {
+    currentCategory = category; // Atualiza a categoria global
+
+    // Remove a classe 'active' de todas as abas
+    document.querySelectorAll('.tab-menu .tab-item').forEach(tab => {
+        tab.classList.remove('active');
+    });
+
+    // Adiciona a classe 'active' à aba clicada
+    clickedTabElement.classList.add('active');
+
+    // Recarrega o cartão de vacinação para aplicar o filtro da nova categoria
+    if (currentPessoaId) {
+        loadPessoaCartao(); // loadPessoaCartao já chama renderCartaoVacinacaoTable com a categoria atual
+    } else {
+        // Se não houver pessoa selecionada, limpa a tabela ou exibe mensagem
+        const vacinasTable = document.getElementById('vacinasTable');
+        vacinasTable.querySelector('thead').innerHTML = '';
+        vacinasTable.querySelector('tbody').innerHTML = '';
+        // Também limpa o cabeçalho de vacinas se a pessoa não estiver selecionada
+        renderCartaoVacinacaoTable([]); // Renderiza com array vazio para limpar colunas de vacinas
     }
 }

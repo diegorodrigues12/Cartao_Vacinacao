@@ -1,4 +1,3 @@
-# cartao_vacinacao_api/models.py
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
@@ -8,12 +7,13 @@ class Vacina(db.Model):
     __tablename__ = 'vacinas'
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), unique=True, nullable=False)
+    categoria = db.Column(db.String(100), nullable=False, default='Geral') # NOVO: Campo categoria
 
     # Relacionamento com Vacinacao
     vacinacoes = db.relationship('Vacinacao', backref='vacina', lazy=True, cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Vacina {self.nome}>"
+        return f"<Vacina {self.nome} ({self.categoria})>"
 
 class Pessoa(db.Model):
     __tablename__ = 'pessoas'
@@ -35,7 +35,6 @@ class Vacinacao(db.Model):
     data_aplicacao = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     dose_aplicada = db.Column(db.String(50), nullable=False) # Ex: "1a Dose", "2a Dose", "Reforco", etc.
 
-    # Garante que não haja múltiplas vacinações da mesma vacina com a mesma dose para a mesma pessoa
     __table_args__ = (db.UniqueConstraint('pessoa_id', 'vacina_id', 'dose_aplicada', name='_pessoa_vacina_dose_uc'),)
 
     def __repr__(self):

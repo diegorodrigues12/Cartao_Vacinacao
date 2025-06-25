@@ -232,9 +232,14 @@ th:first-child {
 
 /* Estilo para a primeira célula de cada linha (o tipo de dose) */
 tbody tr td:first-child {
+    /* ATUALIZADO: Usará flexbox para centralizar e alinhar o conteúdo interno */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center; /* Centraliza horizontalmente */
+    height: 100%; /* Garante que o flexbox ocupe a altura total da célula */
     background-color: #eef; /* Fundo diferente para a primeira coluna do corpo */
-    font-weight: bold;
-    color: #007bff;
+    font-weight: bold; /* Mantido aqui, mas as cores serão pelos spans */
 }
 
 
@@ -301,7 +306,7 @@ tbody tr td:first-child {
 
 .close-button:hover,
 .close-button:focus {
-    color: #333;
+    color: black;
     text-decoration: none;
     cursor: pointer;
 }
