@@ -26,8 +26,6 @@ Crie e ative o ambiente virtual: python -m venv venv e venv\Scripts\activate (Wi
 
 Instale as dependências: pip install -r requirements.txt
 
-Configure variáveis de ambiente: Defina FLASK_APP=app.py, FLASK_DEBUG=1, SECRET_KEY='sua_chave', JWT_SECRET_KEY='sua_chave_jwt' no seu terminal.
-
 Exclua o DB antigo (se existir): del cartao_vacinacao.db (Win) ou rm cartao_vacinacao.db (Linux/macOS)
 
 Inicie o servidor Flask: flask run
