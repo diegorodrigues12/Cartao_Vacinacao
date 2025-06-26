@@ -1,4 +1,4 @@
-// cartao_vacinacao_api/static/script.js
+// cartao_vacinacao_api/static/scripts.js
 
 const API_BASE_URL = 'http://127.0.0.1:5000'; // Endereço da sua API Flask
 
@@ -8,10 +8,16 @@ let deleteTarget = { type: null, id: null }; // Para o modal de confirmação de
 let currentCartaoData = null; // Para armazenar os dados do cartão de vacinação atual
 let currentCategory = 'Nacional'; // Categoria ativa padrão (primeira aba)
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadPessoas(); // Carrega as pessoas ao carregar a página
-    // No carregamento inicial, ative a aba "Nacional" visualmente
-    const defaultTab = document.querySelector('.tab-item[data-category="Nacional"]');
+// Variáveis para autenticação
+let jwtToken = localStorage.getItem('access_token') || null; // Tenta carregar o token do localStorage
+let isLoggedIn = false;
+
+document.addEventListener('DOMContentLoaded', async () => { 
+    // Garante que o estado de login seja verificado e a UI configurada ao carregar a página
+    await checkLoginStatus(); 
+
+    // Ativa a aba "Nacional" visualmente no carregamento inicial
+    const defaultTab = document.querySelector('.tab-menu .tab-item[data-category="Nacional"]');
     if (defaultTab) {
         defaultTab.classList.add('active');
     }
@@ -26,20 +32,57 @@ async function fetchData(url, method = 'GET', data = null) {
             'Content-Type': 'application/json',
         },
     };
+
+    if (jwtToken) {
+        options.headers['Authorization'] = `Bearer ${jwtToken}`;
+    }
+
     if (data) {
         options.body = JSON.stringify(data);
     }
 
     try {
+        console.log(`-> fetchData: Requisição: ${method} ${url}, Headers:`, options.headers, "Body:", data); 
         const response = await fetch(url, options);
+        console.log(`-> fetchData: Resposta para ${url}: Status ${response.status}`); 
+
+        if (response.status === 401) {
+            logoutUser(false); // Força o logout, mas sem o alert de "desconectado"
+            throw new Error("Não autorizado ou sessão expirada. Por favor, faça login novamente."); 
+        }
         if (!response.ok) {
             const errorData = await response.json();
+            console.error(`-> fetchData: Erro na requisição (JSON da resposta):`, errorData); 
+            if (response.status === 409) {
+                throw new Error(errorData.message || "Recurso já existente (conflito).");
+            } else if (response.status === 422) {
+                // Erro 422 para validação de dados: usa a mensagem do backend se existir
+                let errorMessage = "Dados inválidos enviados. Verifique os campos.";
+                if (errorData.message) {
+                    if (typeof errorData.message === 'object' && errorData.message !== null) {
+                        let fieldErrors = [];
+                        for (const field in errorData.message) {
+                            fieldErrors.push(`${field}: ${errorData.message[field].join(', ')}`);
+                        }
+                        errorMessage = "Dados inválidos: " + fieldErrors.join('; ');
+                    } else {
+                        errorMessage = errorData.message; 
+                    }
+                } else if (errorData.errors) { 
+                    let fieldErrors = [];
+                    for (const field in errorData.errors) {
+                        fieldErrors.push(`${field}: ${errorData.errors[field].join(', ')}`);
+                    }
+                    errorMessage = "Dados inválidos: " + fieldErrors.join('; ');
+                }
+                throw new Error(errorMessage);
+            }
             throw new Error(errorData.message || `Erro HTTP: ${response.status}`);
         }
         return await response.json();
     } catch (error) {
-        console.error('Erro na requisição:', error);
-        throw error; // Re-lança o erro para ser tratado pela função chamadora
+        console.error('-> fetchData: Erro geral na requisição:', error); 
+        throw error; 
     }
 }
 
@@ -49,53 +92,185 @@ function showModal(modalId) {
 
 function closeModal(modalId) {
     document.getElementById(modalId).style.display = 'none';
-    // Limpar mensagens de erro ao fechar
     const messageElement = document.getElementById(modalId.replace('Modal', 'Message'));
     if (messageElement) {
         messageElement.textContent = '';
     }
 }
 
+// --- Funções de Autenticação ---
+
+async function checkLoginStatus() { 
+    const authSection = document.getElementById('authSection');
+    const appContent = document.getElementById('appContent');
+    const loggedInUserSpan = document.getElementById('loggedInUser');
+    const logoutButton = document.getElementById('logoutButton');
+
+    // Inicializa a UI para o estado "deslogado"
+    authSection.style.display = 'block';
+    appContent.style.display = 'none';
+
+    // Limpa detalhes do usuário logado/UI quando deslogado ou verificando status
+    loggedInUserSpan.textContent = ''; 
+    logoutButton.style.display = 'none'; 
+    document.getElementById('currentPessoaNome').textContent = '';
+    document.getElementById('currentPessoaId').textContent = '';
+    document.getElementById('currentPessoaIdentificacao').textContent = '';
+    document.getElementById('deletePessoaButton').style.display = 'none';
+    document.getElementById('cartaoVacinacaoSection').style.display = 'none';
+    renderCartaoVacinacaoTable([]); // Garante que a tabela esteja limpa inicialmente
+
+
+    if (jwtToken && localStorage.getItem('access_token')) { 
+        isLoggedIn = true;
+        try {
+            await loadPessoas(); 
+            
+            // Se loadPessoas() for bem-sucedido (sem lançar erro), então o usuário está validamente logado.
+            authSection.style.display = 'none'; 
+            appContent.style.display = 'block';
+            loggedInUserSpan.textContent = `Logado como: Usuário`; 
+            logoutButton.style.display = 'inline-block';
+
+        } catch (error) {
+            console.error("Falha ao validar token no checkLoginStatus (token expirado/inválido):", error);
+            isLoggedIn = false; 
+            jwtToken = null; 
+            localStorage.removeItem('access_token');
+        }
+    } else {
+        isLoggedIn = false;
+        jwtToken = null; 
+        localStorage.removeItem('access_token');
+    }
+}
+
+async function registerUser() {
+    const username = document.getElementById('authUsername').value;
+    const password = document.getElementById('authPassword').value;
+    const authMessage = document.getElementById('authMessage');
+
+    authMessage.textContent = '';
+    if (!username || !password) {
+        authMessage.style.color = 'red';
+        authMessage.textContent = 'Usuário e senha são obrigatórios para registrar.';
+        return;
+    }
+
+    try {
+        const response = await fetchData(`${API_BASE_URL}/register`, 'POST', { username, password });
+        authMessage.style.color = 'green';
+        authMessage.textContent = response.message || 'Registro bem-sucedido! Agora faça login.';
+        document.getElementById('authPassword').value = ''; 
+    } catch (error) {
+        authMessage.style.color = 'red';
+        authMessage.textContent = error.message;
+        console.error('Erro no registro:', error);
+    }
+}
+
+async function loginUser() {
+    const username = document.getElementById('authUsername').value;
+    const password = document.getElementById('authPassword').value;
+    const authMessage = document.getElementById('authMessage');
+
+    authMessage.textContent = '';
+    if (!username || !password) {
+        authMessage.style.color = 'red';
+        authMessage.textContent = 'Usuário e senha são obrigatórios para login.';
+        return;
+    }
+
+    try {
+        const response = await fetchData(`${API_BASE_URL}/login`, 'POST', { username, password });
+        jwtToken = response.access_token;
+        localStorage.setItem('access_token', jwtToken); 
+        authMessage.style.color = 'green';
+        authMessage.textContent = 'Login bem-sucedido!';
+        console.log("Token recebido:", jwtToken);
+        document.getElementById('authUsername').value = '';
+        document.getElementById('authPassword').value = '';
+        await checkLoginStatus(); 
+    } catch (error) {
+        authMessage.style.color = 'red';
+        authMessage.textContent = error.message || "Erro desconhecido no login.";
+        console.error('Erro no login:', error);
+        jwtToken = null; 
+        localStorage.removeItem('access_token');
+        checkLoginStatus(); 
+    }
+}
+
+function logoutUser(showAlert = true) {
+    jwtToken = null;
+    localStorage.removeItem('access_token');
+    if (showAlert) {
+        alert("Você foi desconectado."); 
+    }
+    checkLoginStatus(); 
+}
+
 // --- Funções de Carregamento de Dados ---
 
 async function loadPessoas() {
+    if (!isLoggedIn) return; 
+
     try {
+        console.log("-> loadPessoas: Buscando lista de pessoas...");
         const pessoas = await fetchData(`${API_BASE_URL}/pessoas`);
+        console.log("-> loadPessoas: Pessoas carregadas:", pessoas);
+
         const pessoaSelect = document.getElementById('pessoaSelect');
-        pessoaSelect.innerHTML = '<option value="">-- Selecione uma pessoa --</option>'; // Limpa e adiciona opção padrão
-        pessoas.forEach(pessoa => {
+        pessoaSelect.innerHTML = '<option value="">-- Selecione uma pessoa --</option>'; 
+        pessoas.forEach(pessoa => { 
             const option = document.createElement('option');
             option.value = pessoa.id;
             option.textContent = `${pessoa.nome} (ID: ${pessoa.id})`;
             pessoaSelect.appendChild(option);
         });
-        // Esconde o botão de exclusão de pessoa se não houver pessoa selecionada
         document.getElementById('deletePessoaButton').style.display = 'none';
+        if (currentPessoaId && document.querySelector(`#pessoaSelect option[value="${currentPessoaId}"]`)) {
+            pessoaSelect.value = currentPessoaId;
+            loadPessoaCartao();
+        } else {
+            currentPessoaId = null;
+            loadPessoaCartao();
+        }
     } catch (error) {
-        console.error('Erro ao carregar pessoas:', error);
+        console.error('Erro ao carregar pessoas (loadPessoas):', error);
+        alert(`Falha ao carregar lista de pessoas: ${error.message}`);
     }
 }
 
 async function loadPessoaCartao() {
+    if (!isLoggedIn) {
+        alert("Você precisa estar logado para carregar o cartão de vacinação.");
+        return;
+    }
+
     currentPessoaId = document.getElementById('pessoaSelect').value;
     const cartaoSection = document.getElementById('cartaoVacinacaoSection');
     const currentPessoaNomeSpan = document.getElementById('currentPessoaNome');
     const currentPessoaIdSpan = document.getElementById('currentPessoaId');
     const currentPessoaIdentificacaoSpan = document.getElementById('currentPessoaIdentificacao');
-    const deletePessoaButton = document.getElementById('deletePessoaButton'); // Referência ao botão
+    const deletePessoaButton = document.getElementById('deletePessoaButton');
 
     if (!currentPessoaId) {
         cartaoSection.style.display = 'none';
         currentPessoaNomeSpan.textContent = '';
         currentPessoaIdSpan.textContent = '';
         currentPessoaIdentificacaoSpan.textContent = '';
-        currentCartaoData = null; // Limpa os dados do cartão quando nenhuma pessoa está selecionada
-        deletePessoaButton.style.display = 'none'; // Oculta o botão se nada estiver selecionado
+        currentCartaoData = null;
+        deletePessoaButton.style.display = 'none';
+        renderCartaoVacinacaoTable([]);
         return;
     }
 
     try {
-        currentCartaoData = await fetchData(`${API_BASE_URL}/pessoas/${currentPessoaId}/cartao_vacinacao`); // Armazena os dados
+        console.log("-> loadPessoaCartao: Buscando cartão para pessoa ID:", currentPessoaId);
+        currentCartaoData = await fetchData(`${API_BASE_URL}/pessoas/${currentPessoaId}/cartao_vacinacao`);
+        console.log("-> loadPessoaCartao: Dados do cartão carregados:", currentCartaoData);
+
         const pessoa = currentCartaoData.pessoa;
         const vacinasRegistradas = currentCartaoData.vacinas_registradas;
 
@@ -103,31 +278,27 @@ async function loadPessoaCartao() {
         currentPessoaIdSpan.textContent = pessoa.id;
         currentPessoaIdentificacaoSpan.textContent = pessoa.numero_identificacao;
         cartaoSection.style.display = 'block';
-        deletePessoaButton.style.display = 'inline-block'; // Mostra o botão quando a pessoa está selecionada
+        deletePessoaButton.style.display = 'inline-block';
 
-        // Carrega TODAS as vacinas (sem filtro) para 'allVacinas' que será usado para filtragem local
         await loadVacinasForSelect(); 
 
-        // Renderiza a tabela com a categoria atual (padrão 'Nacional' ou a selecionada)
         renderCartaoVacinacaoTable(vacinasRegistradas);
 
     } catch (error) {
         console.error('Erro ao carregar cartão de vacinação:', error);
         alert('Erro ao carregar cartão de vacinação. Verifique se a pessoa existe ou se há um erro na API.');
         cartaoSection.style.display = 'none';
-        currentCartaoData = null; // Limpa os dados em caso de erro
-        deletePessoaButton.style.display = 'none'; // Oculta o botão em caso de erro
+        currentCartaoData = null;
+        deletePessoaButton.style.display = 'none';
     }
 }
 
 async function loadVacinasForSelect() {
     try {
-        // allVacinas pega TODAS as vacinas sem filtro de categoria
         allVacinas = await fetchData(`${API_BASE_URL}/vacinas`); 
         const vacinaSelect = document.getElementById('vacinacaoVacinaSelect');
-        vacinaSelect.innerHTML = ''; // Limpa as opções existentes
+        vacinaSelect.innerHTML = '';
 
-        // Adiciona um valor padrão ao select
         const defaultOption = document.createElement('option');
         defaultOption.value = "";
         defaultOption.textContent = "-- Selecione uma vacina --";
@@ -141,6 +312,7 @@ async function loadVacinasForSelect() {
         });
     } catch (error) {
         console.error('Erro ao carregar vacinas para o select:', error);
+        alert(`Falha ao carregar lista de vacinas: ${error.message}`);
     }
 }
 
@@ -209,13 +381,12 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
             tdDoseType.textContent = doseType === "Dose Unica" ? "Dose Única" : doseType;
         }
 
-        tdDoseType.style.fontWeight = 'bold'; // Manter negrito geral para a célula
+        tdDoseType.style.fontWeight = 'bold'; 
         tdDoseType.style.backgroundColor = '#eef';
-        // Ajusta o alinhamento e flexbox para que o conteúdo (Tipo e Dose) fique centralizado
         tdDoseType.style.display = 'flex';
         tdDoseType.style.flexDirection = 'column';
         tdDoseType.style.justifyContent = 'center';
-        tdDoseType.style.alignItems = 'center'; // Centraliza horizontalmente o conteúdo da célula
+        tdDoseType.style.alignItems = 'center';
 
 
         row.appendChild(tdDoseType);
@@ -228,7 +399,6 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
             let doseFound = false;
             if (vacinaData && vacinaData.doses) {
                 const dose = vacinaData.doses.find(d => d.dose_aplicada === doseType);
-
                 if (dose) {
                     if (dose.dose_aplicada === 'Faltoso') {
                         td.textContent = 'Faltoso';
@@ -237,7 +407,6 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
                         td.textContent = `Aplicada: ${new Date(dose.data_aplicacao).toLocaleDateString()}`;
                         td.classList.add('aplicada');
                     }
-                    
                     const deleteButton = document.createElement('button');
                     deleteButton.textContent = 'X';
                     deleteButton.style.marginLeft = '5px';
@@ -246,34 +415,37 @@ function renderCartaoVacinacaoTable(vacinasRegistradas) {
                     deleteButton.style.backgroundColor = '#dc3545';
                     deleteButton.style.color = 'white';
                     deleteButton.style.borderRadius = '3px';
-                    
                     console.log(`Botão de exclusão criado para Vacina: ${vacinaName}, Dose: ${doseType}, ID da Vacinação: ${dose.id_vacinacao}`);
-
                     deleteButton.onclick = (event) => {
                         event.stopPropagation();
                         confirmDelete('vacinacao', dose.id_vacinacao);
                     };
                     td.appendChild(deleteButton);
-                    
                     doseFound = true;
                 }
             }
-            if (!doseFound) {
-                td.textContent = '';
+            if (!doseFound) { 
+                td.textContent = ''; 
             }
-            row.appendChild(td);
-        });
-        tbody.appendChild(row);
-    });
-}
+            row.appendChild(td); 
+        }); 
+        tbody.appendChild(row); 
+    }); 
+} 
 
 
 // --- Funções de Ação (Adicionar/Remover) ---
 
 async function addPessoa() {
+    if (!isLoggedIn) {
+        alert("Você precisa estar logado para cadastrar uma pessoa.");
+        return;
+    }
     const nome = document.getElementById('newPessoaNome').value;
     const identificacao = document.getElementById('newPessoaIdentificacao').value;
     const messageElement = document.getElementById('addPessoaMessage');
+
+    console.log("-> addPessoa: Dados a serem enviados:", { nome, identificacao });
 
     if (!nome || !identificacao) {
         messageElement.textContent = 'Nome e Número de Identificação são obrigatórios.';
@@ -281,14 +453,16 @@ async function addPessoa() {
     }
 
     try {
-        await fetchData(`${API_BASE_URL}/pessoas`, 'POST', { nome: nome, numero_identificacao: identificacao });
+        const response = await fetchData(`${API_BASE_URL}/pessoas`, 'POST', { nome: nome, numero_identificacao: identificacao });
+        console.log("-> addPessoa: Resposta da API:", response);
         alert('Pessoa cadastrada com sucesso!');
         closeModal('addPessoaModal');
         document.getElementById('newPessoaNome').value = '';
         document.getElementById('newPessoaIdentificacao').value = '';
-        await loadPessoas(); // Recarregar a lista de pessoas
+        await loadPessoas(); 
     } catch (error) {
-        messageElement.textContent = error.message;
+        messageElement.textContent = error.message; 
+        console.error('Erro em addPessoa:', error); 
     }
 }
 
@@ -298,6 +472,10 @@ async function addVacina() {
 
 
 async function addVacinacao() {
+    if (!isLoggedIn) {
+        alert("Você precisa estar logado para registrar uma vacinação.");
+        return;
+    }
     if (!currentPessoaId) {
         alert('Por favor, selecione uma pessoa primeiro.');
         return;
@@ -313,7 +491,6 @@ async function addVacinacao() {
         return;
     }
 
-    // VALIDAÇÃO: SEGUNDA DOSE DEPENDE DA PRIMEIRA
     if (currentCartaoData && currentCartaoData.vacinas_registradas) {
         const vacinaSelecionadaNome = allVacinas.find(v => v.id === vacinaId).nome;
         const vacinaRegistro = currentCartaoData.vacinas_registradas.find(v => v.nome_vacina === vacinaSelecionadaNome);
@@ -355,7 +532,7 @@ async function addVacinacao() {
     const formattedDate = `${dataAplicacao}T${formattedTime}`;
 
     try {
-        await fetchData(`${API_BASE_URL}/vacinacoes`, 'POST', {
+        const response = await fetchData(`${API_BASE_URL}/vacinacoes`, 'POST', {
             pessoa_id: parseInt(currentPessoaId),
             vacina_id: vacinaId,
             dose_aplicada: doseAplicada,
@@ -363,13 +540,17 @@ async function addVacinacao() {
         });
         alert('Vacinação registrada com sucesso!');
         closeModal('addVacinacaoModal');
-        await loadPessoaCartao(); // Recarregar o cartão da pessoa
+        await loadPessoaCartao(); 
     }  catch (error) {
         messageElement.textContent = error.message;
     }
 }
 
 function confirmDelete(type, id) {
+    if (!isLoggedIn) {
+        alert("Você precisa estar logado para excluir itens.");
+        return;
+    }
     deleteTarget = { type: type, id: id };
     let message = '';
     if (type === 'vacinacao') {
@@ -389,14 +570,14 @@ async function executeDelete() {
         if (deleteTarget.type === 'vacinacao') {
             await fetchData(`${API_BASE_URL}/vacinacoes/${deleteTarget.id}`, 'DELETE');
             alert('Registro de vacinação excluído com sucesso!');
-            await loadPessoaCartao(); // Recarregar o cartão após exclusão
+            await loadPessoaCartao(); 
         } else if (deleteTarget.type === 'pessoa') {
             await fetchData(`${API_BASE_URL}/pessoas/${deleteTarget.id}`, 'DELETE');
             alert('Pessoa excluída com sucesso!');
             await loadPessoas();
             currentPessoaId = null;
             document.getElementById('pessoaSelect').value = '';
-            loadPessoaCartao(); // Limpar informações do cartão
+            loadPessoaCartao(); 
         } else if (deleteTarget.type === 'vacina') {
             await fetchData(`${API_BASE_URL}/vacinas/${deleteTarget.id}`, 'DELETE');
             alert('Vacina excluída com sucesso!');
@@ -413,6 +594,10 @@ async function executeDelete() {
 // --- Funções para Abrir Modais e Preparar Dados ---
 
 function openAddPessoaModal() {
+    if (!isLoggedIn) {
+        alert("Você precisa estar logado para cadastrar uma pessoa.");
+        return;
+    }
     document.getElementById('newPessoaNome').value = '';
     document.getElementById('newPessoaIdentificacao').value = '';
     document.getElementById('addPessoaMessage').textContent = '';
@@ -420,8 +605,12 @@ function openAddPessoaModal() {
 }
 
 async function openAddVacinacaoModal() {
+    if (!isLoggedIn) {
+        alert("Você precisa estar logado para registrar uma vacinação.");
+        return;
+    }
     if (!currentPessoaId) {
-        alert('Por favor, selecione uma pessoa primeiro para registrar uma vacinação.');
+        alert('Por favor, selecione uma pessoa primeiro.');
         return;
     }
     document.getElementById('vacinacaoPessoaNome').textContent = document.getElementById('currentPessoaNome').textContent;
@@ -434,10 +623,12 @@ async function openAddVacinacaoModal() {
 
 // Função para exportar dados do cartão de vacinação para CSV
 function exportCartaoVacinacaoToCsv() {
-    console.log("Iniciando exportCartaoVacinacaoToCsv..."); // Log de início
+    console.log("-> exportCartaoVacinacaoToCsv: Função iniciada.");
+    console.log("Estado atual: currentPessoaId:", currentPessoaId, "currentCartaoData:", currentCartaoData);
+
     if (!currentCartaoData || !currentPessoaId) {
         alert('Selecione uma pessoa e carregue o cartão de vacinação primeiro para exportar.');
-        console.error("Dados do cartão ou ID da pessoa ausentes para exportação."); // Log de erro
+        console.error("-> exportCartaoVacinacaoToCsv: Dados do cartão ou ID da pessoa ausentes para exportação.");
         return;
     }
 
@@ -446,20 +637,18 @@ function exportCartaoVacinacaoToCsv() {
 
     let csvContent = "";
 
-    // Cabeçalho CSV
-    console.log("currentCategory:", currentCategory); // Log da categoria atual
+    console.log("-> exportCartaoVacinacaoToCsv: currentCategory:", currentCategory);
     const vacinasExibirNestaCategoriaCsv = allVacinas.filter(vac => vac.categoria === currentCategory);
     const vacinaNamesInOrderCsv = vacinasExibirNestaCategoriaCsv.map(vac => vac.nome);
 
-    console.log("vacinaNamesInOrderCsv (colunas do CSV):", vacinaNamesInOrderCsv); // Log das colunas
+    console.log("-> exportCartaoVacinacaoToCsv: vacinaNamesInOrderCsv (colunas do CSV):", vacinaNamesInOrderCsv);
 
     let headerRow = "Dose/Vacina";
     vacinaNamesInOrderCsv.forEach(vacinaName => {
-        headerRow += `;${vacinaName}`;
+        headerRow += `;"${vacinaName}"`; // Separador de ponto e vírgula, com aspas para nomes com espaços
     });
     csvContent += headerRow + "\n";
 
-    // Mapeamento de doses para CSV (usando a mesma ordem de exibição da tabela)
     const dosesTypes = [
         "1a Dose", "2a Dose", "3a Dose",
         "1a Reforco", "2a Reforco",
@@ -467,7 +656,9 @@ function exportCartaoVacinacaoToCsv() {
     ];
 
     dosesTypes.forEach(doseType => {
-        let displayDoseTypeCsv = '';
+        let rowData = ''; 
+        let displayDoseTypeCsv = ''; 
+
         if (doseType === "1a Dose") displayDoseTypeCsv = "Tipo 1ª Dose";
         else if (doseType === "2a Dose") displayDoseTypeCsv = "Tipo 2ª Dose";
         else if (doseType === "3a Dose") displayDoseTypeCsv = "Tipo 3ª Dose";
@@ -476,7 +667,8 @@ function exportCartaoVacinacaoToCsv() {
         else if (doseType === "Dose Unica") displayDoseTypeCsv = "Dose Única";
         else displayDoseTypeCsv = doseType; 
             
-        let rowData = `"${displayDoseTypeCsv}"`;
+        rowData = `"${displayDoseTypeCsv}"`; // Coloca o nome da dose entre aspas
+        
         vacinaNamesInOrderCsv.forEach(vacinaName => {
             const vacinaData = vacinasRegistradas.find(v => v.nome_vacina === vacinaName);
             let cellContent = "";
@@ -490,58 +682,53 @@ function exportCartaoVacinacaoToCsv() {
                     }
                 }
             }
-            rowData += `;"${cellContent}"`;
+            rowData += `;"${cellContent}"`; // Adiciona ponto e vírgula e aspas para o conteúdo da célula
         });
         csvContent += rowData + "\n";
     });
 
     // Informações da Pessoa no final do CSV para clareza
     csvContent += "\n";
-    csvContent += `Informações da Pessoa;\n`;
-    csvContent += `Nome:;${pessoa.nome}\n`;
-    csvContent += `ID:;${pessoa.id}\n`;
-    csvContent += `Identificação:;${pessoa.numero_identificacao}\n`;
+    csvContent += `Informações da Pessoa;\n`; // Linha de cabeçalho
+    csvContent += `Nome;${pessoa.nome}\n`;
+    csvContent += `ID;${pessoa.id}\n`;
+    csvContent += `Identificação;${pessoa.numero_identificacao}\n`;
 
-    console.log("Conteúdo CSV gerado:\n", csvContent); // Log do conteúdo final
+    console.log("-> exportCartaoVacinacaoToCsv: Conteúdo CSV gerado:\n", csvContent);
 
-    // Cria um Blob e dispara o download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); // type de volta para text/csv
     const link = document.createElement('a');
     if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', `cartao_vacinacao_${pessoa.nome.replace(/\s/g, '_')}_${pessoa.id}.csv`);
+        link.setAttribute('download', `cartao_vacinacao_${pessoa.nome.replace(/\s/g, '_')}_${pessoa.id}.csv`); // Extensão de volta para .csv
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
+        link.click();
         document.body.removeChild(link);
-        console.log("Download do CSV disparado."); // Log de sucesso
+        console.log("-> exportCartaoVacinacaoToCsv: Download do CSV disparado.");
     } else {
         alert('Seu navegador não suporta download direto de arquivos. Por favor, copie o conteúdo.');
-        console.error("Navegador não suporta download direto."); // Log de erro
+        console.error("-> exportCartaoVacinacaoToCsv: Navegador não suporta download direto.");
     }
 }
 
 // Função para lidar com a seleção de categorias nas abas
 function selectCategory(category, clickedTabElement) {
-    currentCategory = category; // Atualiza a categoria global
+    currentCategory = category; 
 
-    // Remove a classe 'active' de todas as abas
     document.querySelectorAll('.tab-menu .tab-item').forEach(tab => {
         tab.classList.remove('active');
     });
 
-    // Adiciona a classe 'active' à aba clicada
     clickedTabElement.classList.add('active');
 
-    // Recarrega o cartão de vacinação para aplicar o filtro da nova categoria
     if (currentPessoaId) {
-        loadPessoaCartao(); // loadPessoaCartao já chama renderCartaoVacinacaoTable com a categoria atual
+        loadPessoaCartao(); 
     } else {
-        // Se não houver pessoa selecionada, limpa a tabela ou exibe mensagem
         const vacinasTable = document.getElementById('vacinasTable');
         vacinasTable.querySelector('thead').innerHTML = '';
         vacinasTable.querySelector('tbody').innerHTML = '';
-        // Também limpa o cabeçalho de vacinas se a pessoa não estiver selecionada
-        renderCartaoVacinacaoTable([]); // Renderiza com array vazio para limpar colunas de vacinas
+        renderCartaoVacinacaoTable([]);
     }
 }

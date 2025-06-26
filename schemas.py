@@ -1,7 +1,7 @@
 from flask_marshmallow import Marshmallow
-from models import Vacina, Pessoa, Vacinacao, User # NOVA IMPORTAÇÃO: User
+from models import Vacina, Pessoa, Vacinacao, User
 from datetime import datetime
-from marshmallow import fields # Importado para usar fields.DateTime e outros tipos de campo
+from marshmallow import fields
 
 ma = Marshmallow()
 
@@ -9,12 +9,16 @@ class VacinaSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Vacina
         load_instance = True
-        sqla_session = None # Será definido no app.py
+        sqla_session = None
 
 class PessoaSchema(ma.SQLAlchemyAutoSchema):
+    id = fields.Int(dump_only=True)
+    nome = fields.Str(required=True)
+    numero_identificacao = fields.Str(required=True)
+
     class Meta:
         model = Pessoa
-        load_instance = True
+        load_instance = False # CORRIGIDO AQUI para False
         sqla_session = None
 
 class VacinacaoSchema(ma.SQLAlchemyAutoSchema):
@@ -25,15 +29,10 @@ class VacinacaoSchema(ma.SQLAlchemyAutoSchema):
         load_instance = True
         sqla_session = None
 
-# NOVO: Esquema para o modelo de Usuário
 class UserSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = User
-        load_instance = True
-        sqla_session = None # Será definido no app.py
-        # Campos que devem ser visíveis ou carregáveis.
-        # 'password' é 'load_only' (apenas para entrada)
+        load_instance = False # CORRIGIDO AQUI para False (para evitar "Deserialization requires a session" em testes/fluxos futuros)
+        sqla_session = None
         load_only = ("password",) 
-        # 'id' e 'username' são 'dump_only' (apenas para saída)
-        # NUNCA inclua 'password_hash' em 'dump_only' em produção, pois ele exporia o hash da senha.
-        dump_only = ("id", "username",) # Expondo apenas id e username na saída JSON
+        dump_only = ("id", "username",) 

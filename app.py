@@ -1,16 +1,19 @@
 # cartao_vacinacao_api/app.py
 from flask import Flask, request, jsonify, render_template
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity # NOVAS IMPORTAÇÕES JWT
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from config import Config
-from models import db, Vacina, Pessoa, Vacinacao, User # ATUALIZADO: Importado User
-from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema, UserSchema # ATUALIZADO: Importado UserSchema
-from datetime import datetime, timedelta # timedelta para expiração do token
+from models import db, Vacina, Pessoa, Vacinacao, User # Importado User
+from schemas import ma, VacinaSchema, PessoaSchema, VacinacaoSchema, UserSchema # Importado UserSchema
+from datetime import datetime, timedelta
 import os
 import logging
+from sqlalchemy.exc import IntegrityError # Para tratar erros de unicidade
+from marshmallow import ValidationError # Para tratar erros de validação de schema
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Configurar logging básico para erros
 if not app.debug:
     file_handler = logging.FileHandler('error.log')
     file_handler.setLevel(logging.WARNING)
@@ -19,13 +22,14 @@ if not app.debug:
 db.init_app(app)
 ma.init_app(app)
 
-jwt = JWTManager(app) # NOVA LINHA: Inicialização do JWT
+# Inicializa JWTManager
+jwt = JWTManager(app)
 
 # Definir a sessão do SQLAlchemy para os schemas
 VacinaSchema.Meta.sqla_session = db.session
 PessoaSchema.Meta.sqla_session = db.session
 VacinacaoSchema.Meta.sqla_session = db.session
-UserSchema.Meta.sqla_session = db.session # NOVA LINHA: Associa UserSchema ao db.session
+UserSchema.Meta.sqla_session = db.session # Associa UserSchema ao db.session
 
 # Instancia os schemas
 vacina_schema = VacinaSchema()
@@ -33,14 +37,13 @@ vacinas_schema = VacinaSchema(many=True)
 pessoa_schema = PessoaSchema()
 pessoas_schema = PessoaSchema(many=True)
 vacinacao_schema = VacinacaoSchema()
-vacinacoes_schema = VacinacaoSchema(many=True)
-user_schema = UserSchema() # NOVA LINHA: Instancia o UserSchema
+vacinacoes_schema = VacinacaoSchema(many=True) # CORRIGIDO AQUI: De VacinacoesSchema para VacinacaoSchema
+user_schema = UserSchema() # Instancia o UserSchema
 
 # Cria as tabelas no banco de dados se elas não existirem e popula vacinas iniciais
 with app.app_context():
     db.create_all()
 
-    # Vacinas iniciais com categorias
     initial_vacinas_data = [
         {"nome": "BCG", "categoria": "Nacional"},
         {"nome": "HEPATITE B", "categoria": "Nacional"},
@@ -78,13 +81,35 @@ with app.app_context():
     db.session.commit()
     print("Vacinas iniciais populadas ou atualizadas.")
 
-# --- Manipulador de Erro Global ---
+# --- Manipulador de Erro Global (APRIMORADO) ---
 @app.errorhandler(500)
 def internal_server_error(e):
     app.logger.exception("Ocorreu uma exceção não tratada durante uma requisição.")
     return jsonify({"message": "Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde."}), 500
 
-# --- Rotas de Autenticação (NOVAS) ---
+@app.errorhandler(422) # Erros de validação do Marshmallow (Unprocessable Entity)
+@app.errorhandler(400) # Bad Request (JSON malformado, etc.)
+def handle_validation_error(err):
+    # Tenta extrair a mensagem de erro do Marshmallow ou JSON inválido
+    if hasattr(err, 'messages') and isinstance(err.messages, dict):
+        error_details = []
+        for field, errors in err.messages.items():
+            error_details.append(f"{field}: {', '.join(errors)}")
+        final_message = "Erro de validação: " + "; ".join(error_details)
+    elif hasattr(err, 'data') and isinstance(err.data, dict) and 'messages' in err.data and isinstance(err.data['messages'], dict):
+        error_details = []
+        for field, errors in err.data['messages'].items():
+            error_details.append(f"{field}: {', '.join(errors)}")
+        final_message = "Erro de validação: " + "; ".join(error_details)
+    elif hasattr(err, 'description') and isinstance(err.description, str):
+        final_message = err.description
+    else:
+        final_message = "Erro de validação ou requisição inválida. Verifique os campos."
+
+    app.logger.error(f"Erro de validação/requisição inválida: {final_message}")
+    return jsonify({"message": final_message}), 422
+
+# --- Rotas de Autenticação ---
 @app.route('/register', methods=['POST'])
 def register():
     username = request.json.get('username', None)
@@ -114,18 +139,18 @@ def login():
     if user is None or not user.check_password(password):
         return jsonify({"message": "Username ou password inválidos"}), 401 # Unauthorized
 
-    # Se login bem-sucedido, cria um token de acesso
-    access_token = create_access_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id)) # CONVERTIDO PARA STRING
     return jsonify(access_token=access_token), 200
 
-# --- Rotas da API (Existentes) ---
+# --- Rotas da API ---
 
 @app.route('/')
 def serve_index():
     return render_template('index.html')
 
-# 1. Rotas para Vacinas
+# Rotas de Vacinas
 @app.route('/vacinas', methods=['POST'])
+@jwt_required() 
 def add_vacina():
     try:
         data = request.get_json()
@@ -164,6 +189,7 @@ def get_vacina(id):
     return vacina_schema.jsonify(vacina), 200
 
 @app.route('/vacinas/<int:id>', methods=['DELETE'])
+@jwt_required() 
 def delete_vacina(id):
     vacina = Vacina.query.get(id)
     if not vacina:
@@ -179,28 +205,36 @@ def delete_vacina(id):
         return jsonify({"message": f"Erro ao remover vacina: {str(e)}"}), 500
 
 
-# 2. Rotas para Pessoas
+# Rotas de Pessoas
 @app.route('/pessoas', methods=['POST'])
+@jwt_required() 
 def add_pessoa():
     try:
         data = request.get_json()
-        if not data or 'nome' not in data or 'numero_identificacao' not in data:
-            return jsonify({"message": "Dados inválidos: 'nome' e 'numero_identificacao' são obrigatórios."}), 400
-
-        nome = data['nome']
-        numero_identificacao = data['numero_identificacao']
+        loaded_pessoa = pessoa_schema.load(data) 
+        
+        nome = loaded_pessoa['nome'] 
+        numero_identificacao = loaded_pessoa['numero_identificacao'] 
 
         if Pessoa.query.filter_by(numero_identificacao=numero_identificacao).first():
-            return jsonify({"message": f"Pessoa com número de identificação '{numero_identificacao}' já existe."}), 409
-
+            return jsonify({"message": f"Pessoa com número de identificação '{numero_identificacao}' já existe."}), 409 # CONFLICT
+        
         new_pessoa = Pessoa(nome=nome, numero_identificacao=numero_identificacao)
         db.session.add(new_pessoa)
         db.session.commit()
         return pessoa_schema.jsonify(new_pessoa), 201
+    except ValidationError as err: 
+        db.session.rollback()
+        app.logger.error(f"Erro de validação Marshmallow ao cadastrar pessoa: {err.messages}")
+        return jsonify({"message": err.messages}), 422 # UNPROCESSABLE ENTITY
+    except IntegrityError as e: 
+        db.session.rollback()
+        app.logger.error(f"Erro de integridade ao cadastrar pessoa: {str(e)}")
+        return jsonify({"message": "Não foi possível cadastrar a pessoa devido a um problema de dados (ex: identificação duplicada)."}), 409 # CONFLICT
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f"Erro ao cadastrar pessoa: {str(e)}")
-        return jsonify({"message": f"Erro ao cadastrar pessoa: {str(e)}"}), 500
+        app.logger.error(f"Erro inesperado ao cadastrar pessoa: {str(e)}")
+        return jsonify({"message": f"Erro inesperado ao cadastrar pessoa: {str(e)}"}), 500
 
 @app.route('/pessoas', methods=['GET'])
 def get_pessoas():
@@ -215,6 +249,7 @@ def get_pessoa(id):
     return pessoa_schema.jsonify(pessoa), 200
 
 @app.route('/pessoas/<int:id>', methods=['DELETE'])
+@jwt_required() 
 def delete_pessoa(id):
     pessoa = Pessoa.query.get(id)
     if not pessoa:
@@ -230,8 +265,9 @@ def delete_pessoa(id):
         return jsonify({"message": f"Erro ao remover pessoa: {str(e)}"}), 500
 
 
-# 3. Rotas para Vacinações
+# Rotas para Vacinações
 @app.route('/vacinacoes', methods=['POST'])
+@jwt_required() 
 def add_vacinacao():
     try:
         data = request.get_json()
@@ -289,14 +325,15 @@ def add_vacinacao():
         app.logger.error(f"Erro ao cadastrar vacinação: {str(e)}")
         return jsonify({"message": f"Erro ao cadastrar vacinação: {str(e)}"}), 500
 
-# Consultar o cartão de vacinação de uma pessoa
 @app.route('/pessoas/<int:pessoa_id>/cartao_vacinacao', methods=['GET'])
+@jwt_required() 
 def get_cartao_vacinacao(pessoa_id):
+    current_user_id = get_jwt_identity() 
+    
     pessoa = Pessoa.query.get(pessoa_id)
     if not pessoa:
         return jsonify({"message": "Pessoa não encontrada."}), 404
 
-    # Usa `join` para buscar os nomes das vacinas e seus IDs diretamente do banco
     vacinacoes = db.session.query(Vacinacao, Vacina.nome, Vacina.id.label('vacina_db_id'), Vacina.categoria)\
                            .join(Vacina)\
                            .filter(Vacinacao.pessoa_id == pessoa_id)\
@@ -323,7 +360,6 @@ def get_cartao_vacinacao(pessoa_id):
             "dose_aplicada": vacinacao_obj.dose_aplicada
         })
 
-    # Convertendo o dicionário de vacinas agrupadas para uma lista para a resposta JSON
     for vacina_nome, data in vacinas_agrupadas.items():
         cartao_vacinacao_data["vacinas_registradas"].append(data)
 
@@ -332,6 +368,7 @@ def get_cartao_vacinacao(pessoa_id):
 
 # Excluir registro de vacinação específico
 @app.route('/vacinacoes/<int:id>', methods=['DELETE'])
+@jwt_required() 
 def delete_vacinacao(id):
     vacinacao = Vacinacao.query.get(id)
     if not vacinacao:
@@ -348,3 +385,46 @@ def delete_vacinacao(id):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+from flask_marshmallow import Marshmallow
+from models import Vacina, Pessoa, Vacinacao, User # NOVA IMPORTAÇÃO: User
+from datetime import datetime
+from marshmallow import fields # Importado para usar fields.DateTime e outros tipos de campo
+
+ma = Marshmallow()
+
+class VacinaSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Vacina
+        load_instance = True
+        sqla_session = None # Será definido no app.py
+
+class PessoaSchema(ma.SQLAlchemyAutoSchema):
+    # NOVO: Define os campos explicitamente e marca como obrigatórios
+    id = fields.Int(dump_only=True) # ID apenas para saída
+    nome = fields.Str(required=True) # Campo nome é obrigatório
+    numero_identificacao = fields.Str(required=True) # Campo numero_identificacao é obrigatório
+
+    class Meta:
+        model = Pessoa
+        load_instance = True
+        sqla_session = None # Será definido no app.py
+        # Não precisa de 'fields' aqui se já definiu acima, mas se usar, deve ser uma tupla:
+        # fields = ("id", "nome", "numero_identificacao") 
+
+class VacinacaoSchema(ma.SQLAlchemyAutoSchema):
+    data_aplicacao = fields.DateTime(format='%Y-%m-%dT%H:%M:%S')
+
+    class Meta:
+        model = Vacinacao
+        load_instance = True
+        sqla_session = None
+
+# Esquema para o modelo de Usuário
+class UserSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = User
+        load_instance = True
+        sqla_session = None
+        load_only = ("password",) 
+        dump_only = ("id", "username",) 
